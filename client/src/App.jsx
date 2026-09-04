@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { api, getToken, setToken } from './api.js';
 import { Icon } from './Icons.jsx';
-import { Avatar } from './ui.jsx';
+import { Avatar, ThemeToggle } from './ui.jsx';
+import { useTheme } from './theme.js';
 import Login from './Login.jsx';
 import Dashboard from './Dashboard.jsx';
 import Candidates from './Candidates.jsx';
 import Jobs from './Jobs.jsx';
 import Matches from './Matches.jsx';
 import Applications from './Applications.jsx';
+import Screening from './Screening.jsx';
 import CandidatePortal from './CandidatePortal.jsx';
 
 function parseHash() {
@@ -20,12 +22,14 @@ const NAV = [
   { key: 'jobs', label: 'Jobs', icon: 'briefcase' },
   { key: 'matches', label: 'Best Candidates', icon: 'trophy' },
   { key: 'applications', label: 'Applications', icon: 'list' },
+  { key: 'screening', label: 'Screening', icon: 'filter' },
 ];
 
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [route, setRoute] = useState(() => parseHash());
+  const [theme, toggleTheme] = useTheme();
 
   useEffect(() => {
     const onHash = () => setRoute(parseHash());
@@ -61,7 +65,7 @@ export default function App() {
     return <CandidatePortal authed={!!user} onBack={user ? () => navigate('dashboard') : null} />;
   }
 
-  if (!user) return <Login onLogin={setUser} />;
+  if (!user) return <Login onLogin={setUser} theme={theme} toggleTheme={toggleTheme} />;
 
   const activeView = NAV.some((n) => n.key === view) ? view : 'dashboard';
 
@@ -69,16 +73,18 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          <span className="logo"><Icon name="briefcase" /></span>
-          <span>TalentFlow</span>
-          <small>Recruiter</small>
+          <Avatar name={user.company?.name || user.name} size="md" seed={user.company?.name} />
+          <div className="brand-txt">
+            <span className="co-name">{user.company?.name || 'TalentFlow'}</span>
+            <small>TalentFlow Recruiter</small>
+          </div>
         </div>
         <div className="spacer" />
-        {user.company && <span className="company">{user.company.name}</span>}
         <button className="portal-link" onClick={() => navigate('portal')} title="Open candidate portal">
           <Icon name="external" size={15} /> Candidate portal
         </button>
         <span className="user"><Avatar name={user.name} size="sm" /> {user.name}</span>
+        <ThemeToggle theme={theme} toggle={toggleTheme} />
         <button className="logout" onClick={logout}><Icon name="logout" size={15} /> Log out</button>
       </header>
       <div className="main">
@@ -90,7 +96,7 @@ export default function App() {
               <span className="nav-label">{n.label}</span>
             </button>
           ))}
-          <div className="sidebar-foot">Local-first hiring workspace</div>
+          <div className="sidebar-foot">Powered by TalentFlow — local-first</div>
         </nav>
         <main className="content">
           {activeView === 'dashboard' && <Dashboard companyName={user.company?.name} onNavigate={navigate} />}
@@ -98,6 +104,7 @@ export default function App() {
           {activeView === 'jobs' && <Jobs />}
           {activeView === 'matches' && <Matches />}
           {activeView === 'applications' && <Applications />}
+          {activeView === 'screening' && <Screening />}
         </main>
       </div>
     </div>

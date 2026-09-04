@@ -14,6 +14,7 @@ function ApplyModal({ job, onApply, onExisting, onClose }) {
   const [parsing, setParsing] = useState(false);
   const [questions, setQuestions] = useState(null);
   const [answers, setAnswers] = useState({});
+  const [screening, setScreening] = useState({});
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
@@ -23,6 +24,21 @@ function ApplyModal({ job, onApply, onExisting, onClose }) {
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const answer = (key, value) => setAnswers((a) => ({ ...a, [key]: value }));
+  const screeningAnswer = (id, value) => setScreening((s) => ({ ...s, [id]: value }));
+
+  const toggleChoice = (id, value) => {
+    setScreening((s) => {
+      const cur = Array.isArray(s[id]) ? s[id] : [];
+      return { ...s, [id]: cur.includes(value) ? cur.filter((v) => v !== value) : [...cur, value] };
+    });
+  };
+
+  const isAnswered = (q) => {
+    const v = screening[String(q.id)];
+    if (q.type === 'multiple') return Array.isArray(v) && v.length > 0;
+    if (q.type === 'single') return typeof v === 'string' && v.length > 0;
+    return typeof v === 'string' && v.trim().length > 0;
+  };
 
   const quick = () => {
     setForm((f) => ({
@@ -75,6 +91,12 @@ function ApplyModal({ job, onApply, onExisting, onClose }) {
 
   const submit = async () => {
     setBusy(true); setErr('');
+    const missing = (job.screening_questions || []).filter((q) => q.required && !isAnswered(q));
+    if (missing.length) {
+      setErr(`Please answer: ${missing.map((q) => q.label).join(' · ')}`);
+      setBusy(false);
+      return;
+    }
     const fd = new FormData();
     fd.append('job_id', String(job.id));
     for (const k of ['name', 'email', 'phone', 'location', 'summary', 'years_experience']) fd.append(k, String(form[k] ?? ''));
@@ -84,6 +106,9 @@ function ApplyModal({ job, onApply, onExisting, onClose }) {
     const q = {};
     for (const [k, v] of Object.entries(answers)) if (v) q[k] = v;
     if (Object.keys(q).length) fd.append('questionnaire', JSON.stringify(q));
+    const scr = {};
+    for (const [k, v] of Object.entries(screening)) if (v && (!Array.isArray(v) || v.length > 0)) scr[k] = v;
+    if (Object.keys(scr).length) fd.append('screening', JSON.stringify(scr));
     try { await onApply({ formData: fd, name: form.name }); }
     catch (e) {
       if (e && e.status === 409 && e.data && e.data.tracking_token && onExisting) {
@@ -124,6 +149,56 @@ function ApplyModal({ job, onApply, onExisting, onClose }) {
         <div className="field full"><label>Skills</label><ChipsInput value={form.skills} onChange={(v) => set('skills', v)} /></div>
         <div className="field full"><label>Short summary</label><textarea value={form.summary} onChange={(e) => set('summary', e.target.value)} /></div>
       </div>
+
+      {(job.screening_questions || []).length > 0 && (
+        <div className="screen-section">
+          <div className="eeo-head">
+            <span className="chip-icon"><Icon name="filter" size={16} /></span>
+            <div>
+              <h3 style={{ margin: 0 }}>Before you apply</h3>
+              <p className="muted small" style={{ margin: 0 }}>Answer these screening questions as completely as you can — the team reviews them with your application.</p>
+            </div>
+          </div>
+          <div className="screen-questions">
+            {job.screening_questions.map((q) => {
+              const id = String(q.id);
+              const val = screening[id];
+              return (
+                <div className="field" key={q.id}>
+                  <label className={q.required ? 'required' : ''}>{q.label}</label>
+                  {q.description && <div className="muted small" style={{ marginBottom: 6 }}>{q.description}</div>}
+                  {q.type === 'paragraph' && (
+                    <textarea rows={3} value={val || ''} onChange={(e) => screeningAnswer(id, e.target.value)} />
+                  )}
+                  {q.type === 'single' && (
+                    <div className="radio-grid">
+                      {q.options.map((o) => (
+                        <label key={o.value} className={`radio-card ${val === o.value ? 'selected' : ''}`}>
+                          <input type="radio" name={`screen-${q.id}`} checked={val === o.value} onChange={() => screeningAnswer(id, o.value)} />
+                          <span>{o.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  {q.type === 'multiple' && (
+                    <div className="radio-grid">
+                      {q.options.map((o) => (
+                        <label key={o.value} className={`radio-card ${(Array.isArray(val) ? val : []).includes(o.value) ? 'selected' : ''}`}>
+                          <input type="checkbox" checked={(Array.isArray(val) ? val : []).includes(o.value)} onChange={() => toggleChoice(id, o.value)} />
+                          <span>{o.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  {q.type === 'text' && (
+                    <input value={val || ''} onChange={(e) => screeningAnswer(id, e.target.value)} />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="eeo-section">
         <div className="eeo-head">
@@ -406,7 +481,7 @@ export default function CandidatePortal({ authed, onBack }) {
 
   if (statusToken) {
     return (
-      <div className="portal">
+      <div className="portal" data-theme="light">
         <div className="portal-top">
           <div className="portal-brand"><span className="pmark"><Icon name="briefcase" size={18} /></span> TalentFlow <span className="muted" style={{ fontWeight: 600 }}>Careers</span></div>
           <div className="spacer" />
@@ -422,7 +497,7 @@ export default function CandidatePortal({ authed, onBack }) {
   }
 
   return (
-    <div className="portal">
+    <div className="portal" data-theme="light">
       <div className="portal-top">
         <div className="portal-brand"><span className="pmark"><Icon name="briefcase" size={18} /></span> TalentFlow <span className="muted" style={{ fontWeight: 600 }}>Careers</span></div>
         <div className="spacer" />

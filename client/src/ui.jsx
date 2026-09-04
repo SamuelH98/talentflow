@@ -1,6 +1,15 @@
 import React from 'react';
 import { Icon } from './Icons.jsx';
 
+export function ThemeToggle({ theme, toggle }) {
+  const dark = theme === 'dark';
+  return (
+    <button className="theme-toggle" onClick={toggle} title={dark ? 'Switch to light mode' : 'Switch to dark mode'} aria-label="Toggle color theme">
+      <Icon name={dark ? 'sun' : 'moon'} size={16} />
+    </button>
+  );
+}
+
 export function initials(name) {
   return String(name || '?')
     .split(/\s+/)

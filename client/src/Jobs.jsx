@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { api, formatSalary } from './api.js';
+import { Icon } from './Icons.jsx';
 import { ChipsInput, Modal } from './ui.jsx';
 
 const empty = { title: '', department: '', location: '', description: '', requirements: [], skills: [], years_required: 0, min_salary: null, max_salary: null };
@@ -28,12 +29,86 @@ function JobForm({ initial, onSave, onClose }) {
   );
 }
 
+function JobQuestions({ job, onClose }) {
+  const [rows, setRows] = useState(null);
+  const [inherited, setInherited] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const cfg = await api.jobScreening(job.id);
+        setRows(cfg.questions);
+        setInherited(cfg.inherited);
+      } catch (e) { setErr(e.message); }
+    })();
+  }, [job.id]);
+
+  const move = (i, dir) => {
+    const j = i + dir;
+    if (j < 0 || j >= rows.length) return;
+    setRows((r) => { const next = [...r]; [next[i], next[j]] = [next[j], next[i]]; return next; });
+  };
+  const setFlag = (i, k, v) => setRows((r) => r.map((x, idx) => (idx === i ? { ...x, [k]: v } : x)));
+
+  const save = async () => {
+    setBusy(true); setErr('');
+    try {
+      await api.saveJobScreening(job.id, rows.map((q) => ({ question_id: q.id, enabled: q.enabled, required: q.required })));
+      setSaved(true);
+      setTimeout(onClose, 900);
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+  const enabledCount = (rows || []).filter((q) => q.enabled).length;
+
+  return (
+    <Modal title={`Screening questions — ${job.title}`} icon="filter" width={640} onClose={onClose}>
+      {err && <div className="banner" style={{ background: 'var(--danger-soft)', borderColor: 'var(--danger-border)', color: 'var(--danger)' }}><Icon name="shield" />{err}</div>}
+      {!rows && <div className="muted">Loading…</div>}
+      {rows && (
+        <>
+          <div className="banner" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+            <Icon name="filter" />
+            {inherited
+              ? `Inheriting company defaults — ${enabledCount} question${enabledCount === 1 ? '' : 's'} will appear for this job. Saving below overrides the defaults for this job.`
+              : `${enabledCount} enabled for this job (custom set, no longer inherited).`}
+          </div>
+          <div className="jsq-list">
+            {rows.map((q, i) => (
+              <div key={q.id} className={`jsq-row ${q.enabled ? '' : 'off'}`}>
+                <div style={{ flex: 1 }}>
+                  <div className={q.enabled ? 'bold' : 'muted'} style={{ fontSize: 14 }}>{q.label}</div>
+                  {!q.enabled && <div className="muted small">Not asked on this job's apply form</div>}
+                </div>
+                <div className="row" style={{ gap: 4 }}>
+                  <button type="button" className="icon-btn" onClick={() => move(i, -1)} disabled={i === 0} title="Move up"><Icon name="chevronUp" size={15} /></button>
+                  <button type="button" className="icon-btn" onClick={() => move(i, 1)} disabled={i === rows.length - 1} title="Move down"><Icon name="chevronDown" size={15} /></button>
+                </div>
+                <label className="check-row no-grow"><input type="checkbox" checked={q.required} onChange={(e) => setFlag(i, 'required', e.target.checked)} disabled={!q.enabled} /> Required</label>
+                <label className="switch"><input type="checkbox" checked={q.enabled} onChange={(e) => setFlag(i, 'enabled', e.target.checked)} /><span /></label>
+              </div>
+            ))}
+          </div>
+          {saved && <div className="banner" style={{ background: 'var(--success-soft)', borderColor: 'var(--success-border)', color: 'var(--success)' }}><Icon name="check" />Saved — candidates will see the new set.</div>}
+        </>
+      )}
+      <div className="footer">
+        <button className="btn secondary" onClick={onClose}>Cancel</button>
+        <button className="btn" onClick={save} disabled={busy || !rows || saved}>{busy ? 'Saving…' : 'Save for this job'}</button>
+      </div>
+    </Modal>
+  );
+}
+
 export default function Jobs() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [questionsJob, setQuestionsJob] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -90,6 +165,7 @@ export default function Jobs() {
             </div>
             <div className="actions-row">
               <button className="btn small" onClick={() => toggleMatch(j.id)}>Find best candidates</button>
+              <button className="btn small secondary" onClick={() => setQuestionsJob(j)}>Questions</button>
               <button className="btn small secondary" onClick={() => setEditingId(j.id)}>Edit</button>
               <button className="btn small danger" onClick={() => remove(j.id)}>Delete</button>
             </div>
@@ -99,6 +175,7 @@ export default function Jobs() {
 
       {adding && <JobForm onSave={save} onClose={() => setAdding(false)} />}
       {editingId && <JobForm initial={items.find((j) => j.id === editingId)} onSave={save} onClose={() => setEditingId(null)} />}
+      {questionsJob && <JobQuestions job={questionsJob} onClose={() => setQuestionsJob(null)} />}
     </div>
   );
 }

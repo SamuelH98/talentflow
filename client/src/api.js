@@ -62,6 +62,13 @@ export const api = {
   createApplication: (data) => request('/applications', { method: 'POST', body: JSON.stringify(data) }),
   updateApplicationStatus: (id, data) => request(`/applications/${id}/status`, { method: 'PATCH', body: JSON.stringify(data) }),
 
+  screeningQuestions: () => request('/screening/questions'),
+  createScreeningQuestion: (data) => request('/screening/questions', { method: 'POST', body: JSON.stringify(data) }),
+  updateScreeningQuestion: (id, data) => request(`/screening/questions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteScreeningQuestion: (id) => request(`/screening/questions/${id}`, { method: 'DELETE' }),
+  jobScreening: (id) => request(`/jobs/${id}/screening`),
+  saveJobScreening: (id, questions) => request(`/jobs/${id}/screening`, { method: 'PUT', body: JSON.stringify({ questions }) }),
+
   publicJobs: () => request('/public/jobs'),
   publicJob: (id) => request(`/public/jobs/${id}`),
   publicQuestionnaire: () => request('/public/questionnaire'),

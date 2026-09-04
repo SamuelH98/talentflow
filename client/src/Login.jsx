@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { api, setToken } from './api.js';
 import { Icon } from './Icons.jsx';
+import { ThemeToggle } from './ui.jsx';
 
-export default function Login({ onLogin }) {
+export default function Login({ onLogin, theme, toggleTheme }) {
   const [email, setEmail] = useState('demo@acmetalent.com');
   const [password, setPassword] = useState('password');
   const [error, setError] = useState('');
@@ -52,10 +53,14 @@ export default function Login({ onLogin }) {
         </div>
       </div>
       <div className="login-side">
+        <div className="login-side-top">
+          <span className="login-brand-mini">Recruiter console</span>
+          <ThemeToggle theme={theme} toggle={toggleTheme} />
+        </div>
         <form className="login-card" onSubmit={submit}>
           <h1>Recruiter sign in</h1>
           <div className="sub">Welcome back — manage your pipeline.</div>
-          {error && <div className="banner" style={{ background: 'var(--danger-soft)', borderColor: '#f5c2c2', color: '#991b1b' }}><Icon name="shield" />{error}</div>}
+          {error && <div className="banner" style={{ background: 'var(--danger-soft)', borderColor: 'var(--danger-border)', color: 'var(--danger)' }}><Icon name="shield" />{error}</div>}
           <div className="field required">
             <label>Email</label>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" required />

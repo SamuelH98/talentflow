@@ -9,11 +9,29 @@ TalentFlow — local hiring & candidate-ranking app
 A locally hosted "Workday-lite" where companies add jobs and candidates, and the app automatically scores/ranks the best candidates per job with transparent match breakdowns.
 
 ### Current Status
-Recruiter UI redesigned + public candidate portal shipped. Workday-style EEO questions + local resume parsing (upload → auto-fill) implemented with 18 passing server tests; client builds cleanly. All work is uncommitted (working tree) — next commit is a milestone.
+Recruiter UI + public candidate portal shipped. EEO questions + local resume parsing, recruiter-managed screening questions (library + per-job config), and recruiter-only dark mode (OS default + toggle + company brand in topbar) all implemented with **22 passing server tests**; client builds cleanly. Screening work is committed (`0ac206e` server, client pending); everything else is committed.
 
 ---
 
 ## Completed Features
+
+### Feature: Screening questions (recruiter library + per-job config)
+#### Validation
+- API test suite covers: library CRUD/validation/company isolation; per-job "inherit defaults → materialize → public reflects"; apply-time validation (422 with missing labels), answer sanitization (unknown options/questions dropped, multiple→array), labelled recruiter-only visibility incl. fallback label for deleted questions.
+- Live smoke test against a running server: 3 seeded questions in library, `GET /api/jobs/:id/screening` returns inherited config with per-question flags, and `GET /api/applications` returns labelled screening answers for Sara Chen + Aisha Khan.
+#### Tests Added
+- `server/tests/screening.test.js` — 3 subtests; `server/tests/portal-apply.test.js` updated for nested `{eeo, screening}` answers. Total suite: 22 passing.
+
+### Feature: Dark mode + company brand (recruiter UI)
+#### Validation
+- Client builds cleanly; theme via `useTheme()` (`talentflow_theme` in localStorage, OS `prefers-color-scheme` default) driving `[data-theme="dark"]` token overrides. Public portal is wrapped in `data-theme="light"` so it stays light regardless of the recruiter preference.
+- Topbar now leads with the recruiting company's avatar/name; TalentFlow is the smaller secondary line.
+#### Tests Added
+- None (CSS/UI); backend unchanged and covered.
+
+---
+
+## Previous milestones
 
 ### Feature: Auth (JWT, multi-company scoping)
 #### Validation
@@ -77,22 +95,22 @@ Recruiter UI redesigned + public candidate portal shipped. Workday-style EEO que
 ## Current Work
 
 ### Active Feature
-Workday-style EEO questions + resume parsing (portal) — implemented, awaiting commit.
+Screening questions + dark mode client milestone — implemented, awaiting commit (server already committed `0ac206e`).
 
 ### Progress
-- Server: `questionnaire.js`, `resume.js` (extraction + heuristics + aliases), `application_answers` table, resume columns on `candidates`, multipart apply + resume download + multer error handling.
-- Client: `ApplyModal` rewrite in `CandidatePortal.jsx` (resume drop zone → auto-fill, radio-card EEO grid with detail fields + disclosures, 409 duplicate → jump to tracker); `api.js` FormData-aware + `publicQuestionnaire`/`resumeParse`; `Icons.jsx` `upload`/`lock`; new CSS (`resume-drop`, `radio-grid`/`radio-card`, `eeo-*`, `detail-input`, `disclosure`).
-- Docs: README updated (features, routes, layout, portal blurb).
+- Client: api.js screening functions; `theme.js` (`useTheme` hook, localStorage `talentflow_theme`); `Screening.jsx` library view + QuestionForm modal; `Jobs.jsx` JobQuestions per-job modal; `CandidatePortal.jsx` "Before you apply" screening section with required validation; `Applications.jsx` rewritten with expandable rows + labelled screening answers; `App.jsx` NAV + theme wiring + company-branded topbar; `ui.jsx` `ThemeToggle`; `Login.jsx` toggle in sign-in side; `Icons.jsx` `sun`/`moon`/`chevronUp`/`trash`; `styles.css` `[data-theme]` token blocks (dark + portal-light scoping), tokenized recruiter hardcoded colors, and CSS for `screen-*`, `jsq-*`, `app-*`, `qa`, `option-row`, `check-row`, `switch`, `theme-toggle`, `brand-*`.
+- Docs: README updated (features, portal blurb, layout, routes). PROJECT_STATE updated.
+- Live smoke test (server running on :4000): login → screening library (3 seeded questions) → per-job inherited config → applications return labelled screening answers. Demo data reseeded idempotently.
 
 ### Remaining Work
-1. Commit frontend/backend milestone (server changes already committed in `432a561`; client + docs + resume-fix pending commit).
+1. Commit client milestone ("Screening questions UI + dark mode + company brand").
 2. (Optional) "View resume" button on the recruiter Candidates view via `GET /api/candidates/:id/resume`.
 
 ---
 
 ## Next Actions
 
-1. **Commit milestone** — client (ApplyModal, api.js, Icons, styles, CandidatePortal wiring), the `java`-matcher fix + regression test, and README/PROJECT_STATE updates as "Candidate portal: EEO questions + resume upload/auto-fill".
+1. **Commit client milestone** — Screening.jsx, theme.js, Jobs/Applications/CandidatePortal/App/Login/ui/`api.js`/`Icons.jsx`/`styles.css`, and the README/PROJECT_STATE updates, as "Screening questions UI + dark mode + company brand".
 2. (Optional) Add candidate "archived" state toggle in UI (backend filter already honors it).
 3. (Optional) Production hardening: set real `JWT_SECRET`, add rate limiting, run behind HTTPS.
 4. (Optional) Public portal hardening when exposed publicly: cap lookup rate, add basic bot protection on `POST /api/public/applications`.
@@ -127,7 +145,7 @@ Workday-style EEO questions + resume parsing (portal) — implemented, awaiting 
 
 ## Resume Instructions
 
-- **Verify current state:** `cd ~/git/talentflow/server && npm test` (expect 18 passing), then `cd ~/git/talentflow/client && npm run build`.
+- **Verify current state:** `cd ~/git/talentflow/server && npm test` (expect 22 passing), then `cd ~/git/talentflow/client && npm run build`.
 - **Run the app:** from repo root: `npm run dev` → open http://localhost:5173, log in `demo@acmetalent.com` / `password`; portal at http://localhost:5173/#/portal (status pages live at `#/portal/status/<token>`).
-- **Where to start reading:** `server/src/matching.js` (scoring core, pure functions), `server/src/index.js` (all routes incl. `/api/public/*`), `server/src/resume.js` (resume extraction + auto-fill heuristics), `server/src/questionnaire.js` (EEO questions), `client/src/App.jsx` (routing), `client/src/CandidatePortal.jsx` (portal UI + ApplyModal).
-- **Next concrete step:** commit the EEO + resume milestone (see Next Actions).
+- **Where to start reading:** `server/src/matching.js` (scoring core, pure functions), `server/src/index.js` (all routes incl. `/api/public/*` + `/api/screening/*`), `server/src/screening.js` (library, per-job config, answer sanitizing), `server/src/resume.js` (resume extraction + auto-fill heuristics), `server/src/questionnaire.js` (EEO questions), `client/src/App.jsx` (routing + theme), `client/src/theme.js` (dark-mode hook), `client/src/CandidatePortal.jsx` (portal UI + ApplyModal), `client/src/Screening.jsx` (library UI).
+- **Next concrete step:** commit the screening + dark mode client milestone (see Next Actions).
