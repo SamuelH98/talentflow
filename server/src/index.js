@@ -256,4 +256,8 @@ app.patch('/api/applications/:id/status', requireAuth, (req, res) => {
   res.json(db.prepare('SELECT * FROM applications WHERE id = ?').get(req.params.id));
 });
 
-app.listen(PORT, () => console.log(`TalentFlow API listening on http://localhost:${PORT}`));
+export { app };
+
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => console.log(`TalentFlow API listening on http://localhost:${PORT}`));
+}

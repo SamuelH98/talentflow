@@ -7,10 +7,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.join(__dirname, '..', 'data');
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
-const dbPath = process.env.DB_PATH || path.join(dataDir, 'talentflow.db');
+function dbPath() {
+  return process.env.DB_PATH || path.join(dataDir, 'talentflow.db');
+}
 
-export function createDb(dbFile = dbPath) {
-  const db = new Database(dbFile);
+export function createDb(dbFile) {
+  const db = new Database(dbFile || dbPath());
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
 
@@ -85,5 +87,5 @@ export function createDb(dbFile = dbPath) {
 }
 
 export function getDb() {
-  return createDb(dbPath);
+  return createDb(dbPath());
 }
