@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { getDb } from './db.js';
 import { requireAuth, signToken } from './auth.js';
 import { scoreCandidate, rankCandidates, parseSkills } from './matching.js';
@@ -10,6 +11,18 @@ app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 4000;
+
+const PUBLIC_STAGES = ['matched', 'in_review', 'interview', 'hired'];
+
+function getDefaultCompany(db) {
+  return db.prepare('SELECT * FROM companies ORDER BY id LIMIT 1').get();
+}
+
+function scrubJob(job) {
+  if (!job) return job;
+  const { company_id, status, ...rest } = job;
+  return { ...rest };
+}
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
@@ -232,8 +245,8 @@ app.post('/api/applications', requireAuth, (req, res) => {
   if (!job || !cand) return res.status(404).json({ error: 'Job or candidate not found' });
   try {
     const info = db
-      .prepare('INSERT INTO applications (job_id, candidate_id, score, notes) VALUES (?, ?, ?, ?)')
-      .run(job_id, candidate_id, score ?? null, notes || null);
+      .prepare('INSERT INTO applications (job_id, candidate_id, score, notes, tracking_token, status_updated_at) VALUES (?, ?, ?, ?, ?, datetime(\'now\'))')
+      .run(job_id, candidate_id, score ?? null, notes || null, crypto.randomUUID());
     res.status(201).json({ id: info.lastInsertRowid, job_id, candidate_id, score, notes });
   } catch {
     return res.status(400).json({ error: 'Candidate already applied to this job' });
@@ -251,9 +264,116 @@ app.patch('/api/applications/:id/status', requireAuth, (req, res) => {
     )
     .get(req.params.id, req.user.company_id);
   if (!row) return res.status(404).json({ error: 'Application not found' });
-  db.prepare('UPDATE applications SET status = ?, notes = ? WHERE id = ?')
+  db.prepare("UPDATE applications SET status = ?, notes = ?, status_updated_at = datetime('now') WHERE id = ?")
     .run(status || row.status, notes ?? row.notes, req.params.id);
   res.json(db.prepare('SELECT * FROM applications WHERE id = ?').get(req.params.id));
+});
+
+// ---------- Public candidate portal ----------
+
+app.get('/api/public/jobs', (req, res) => {
+  const db = getDb();
+  const company = getDefaultCompany(db);
+  if (!company) return res.status(404).json({ error: 'No company configured' });
+  const rows = db
+    .prepare('SELECT * FROM jobs WHERE company_id = ? AND status = ? ORDER BY created_at DESC')
+    .all(company.id, 'open');
+  res.json(rows.map(jobRow).map(scrubJob));
+});
+
+app.get('/api/public/jobs/:id', (req, res) => {
+  const db = getDb();
+  const company = getDefaultCompany(db);
+  if (!company) return res.status(404).json({ error: 'No company configured' });
+  const job = db
+    .prepare('SELECT * FROM jobs WHERE id = ? AND company_id = ? AND status = ?')
+    .get(req.params.id, company.id, 'open');
+  if (!job) return res.status(404).json({ error: 'Job not found' });
+  res.json(scrubJob(jobRow(job)));
+});
+
+app.post('/api/public/applications', (req, res) => {
+  const db = getDb();
+  const { job_id, name, email, phone, location, summary, skills, years_experience } = req.body || {};
+  if (!job_id || !name || !email) return res.status(400).json({ error: 'name, email and job_id are required' });
+  const company = getDefaultCompany(db);
+  if (!company) return res.status(404).json({ error: 'No company configured' });
+  const job = db.prepare('SELECT * FROM jobs WHERE id = ? AND company_id = ? AND status = ?').get(job_id, company.id, 'open');
+  if (!job) return res.status(404).json({ error: 'Job not found or no longer open' });
+
+  const existing = db.prepare('SELECT * FROM candidates WHERE company_id = ? AND email = ?').get(company.id, email);
+  let candidateId;
+  if (existing) {
+    candidateId = existing.id;
+    const sameJobApp = db
+      .prepare('SELECT * FROM applications WHERE job_id = ? AND candidate_id = ?')
+      .get(job_id, candidateId);
+    if (sameJobApp) {
+      return res.status(409).json({
+        error: 'You have already applied to this job',
+        tracking_token: sameJobApp.tracking_token,
+        existing_application: true,
+      });
+    }
+  } else {
+    candidateId = db
+      .prepare(
+        `INSERT INTO candidates (company_id, name, email, phone, location, title, summary, years_experience, skills)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        company.id, name, email, phone || null, location || null, job.title || null,
+        summary || null, Number(years_experience) || 0, JSON.stringify(skills || [])
+      ).lastInsertRowid;
+  }
+
+  const token = crypto.randomUUID();
+  const info = db
+    .prepare("INSERT INTO applications (job_id, candidate_id, tracking_token, status_updated_at) VALUES (?, ?, ?, datetime('now'))")
+    .run(job_id, candidateId, token);
+  res.status(201).json({
+    id: info.lastInsertRowid,
+    tracking_token: token,
+    status: 'matched',
+    job: { id: job.id, title: job.title, department: job.department, location: job.location },
+    applied_at: new Date().toISOString(),
+  });
+});
+
+function publicApplicationRow(db, app) {
+  const job = db.prepare('SELECT * FROM jobs WHERE id = ?').get(app.job_id);
+  const cand = db.prepare('SELECT * FROM candidates WHERE id = ?').get(app.candidate_id);
+  const stageIndex = PUBLIC_STAGES.includes(app.status) ? PUBLIC_STAGES.indexOf(app.status) : -1;
+  return {
+    tracking_token: app.tracking_token,
+    status: app.status,
+    stage_index: stageIndex,
+    applied_at: app.created_at,
+    last_updated: app.status_updated_at || app.created_at,
+    job: job ? scrubJob(jobRow(job)) : null,
+    candidate: cand ? { name: cand.name, email: cand.email } : null,
+  };
+}
+
+app.get('/api/public/applications/:token', (req, res) => {
+  const db = getDb();
+  const app = db.prepare('SELECT * FROM applications WHERE tracking_token = ?').get(req.params.token);
+  if (!app) return res.status(404).json({ error: 'Application not found' });
+  res.json(publicApplicationRow(db, app));
+});
+
+app.post('/api/public/applications/lookup', (req, res) => {
+  const db = getDb();
+  const { email } = req.body || {};
+  if (!email) return res.status(400).json({ error: 'email is required' });
+  const company = getDefaultCompany(db);
+  if (!company) return res.json([]);
+  const cand = db.prepare('SELECT id FROM candidates WHERE company_id = ? AND email = ?').get(company.id, email);
+  if (!cand) return res.json([]);
+  const apps = db
+    .prepare('SELECT * FROM applications WHERE candidate_id = ? ORDER BY created_at DESC')
+    .all(cand.id);
+  res.json(apps.map((a) => publicApplicationRow(db, a)));
 });
 
 export { app };

@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { createDb } from './db.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -153,6 +154,38 @@ if (jobCount === 0) {
     }
   });
   tx();
+}
+
+const appCount = db.prepare('SELECT COUNT(*) AS n FROM applications').get().n;
+if (appCount === 0) {
+  const rows = db
+    .prepare(
+      `SELECT c.id AS cid, c.name AS cname, c.email AS cemail, j.id AS jid, j.title AS jtitle
+       FROM candidates c, jobs j
+       WHERE c.company_id = ? AND j.company_id = ?`
+    )
+    .all(companyId, companyId);
+  const byTitle = (t) => rows.find((r) => r.jtitle === t);
+  const byName = (n) => rows.find((r) => r.cname === n);
+  const pick = (cname, jtitle, status, daysAgo) => {
+    const c = byName(cname);
+    const j = byTitle(jtitle);
+    if (!c || !j) return;
+    const applied = new Date(Date.now() - daysAgo * 86400000).toISOString().replace('T', ' ').slice(0, 19);
+    db.prepare(
+      `INSERT INTO applications (job_id, candidate_id, tracking_token, status, status_updated_at, created_at, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(j.cid, c.cid, crypto.randomUUID(), status, applied, applied,
+      status === 'interview' ? 'Scheduled technical screen' : null);
+  };
+  pick('Sara Chen', 'Senior Full-Stack Engineer', 'in_review', 3);
+  pick('Hannah Schmidt', 'Senior Full-Stack Engineer', 'interview', 5);
+  pick('Miguel Ortega', 'Frontend Developer (React)', 'in_review', 1);
+  pick('Tom Bradley', 'Frontend Developer (React)', 'interview', 6);
+  pick('Priya Patil', 'Machine Learning Engineer', 'interview', 4);
+  pick('Grace Liu', 'Machine Learning Engineer', 'in_review', 2);
+  pick('Aisha Khan', 'Backend Engineer (Node.js)', 'hired', 12);
+  pick('Daniel Osei', 'Backend Engineer (Node.js)', 'matched', 0);
 }
 
 console.log('Seed complete.');

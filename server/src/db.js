@@ -74,6 +74,8 @@ export function createDb(dbFile) {
       score REAL,
       status TEXT NOT NULL DEFAULT 'matched',
       notes TEXT,
+      tracking_token TEXT UNIQUE,
+      status_updated_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(job_id, candidate_id)
     );
@@ -81,6 +83,17 @@ export function createDb(dbFile) {
     CREATE INDEX IF NOT EXISTS idx_candidates_company ON candidates(company_id);
     CREATE INDEX IF NOT EXISTS idx_jobs_company ON jobs(company_id);
     CREATE INDEX IF NOT EXISTS idx_applications_job ON applications(job_id);
+  `);
+
+  const cols = db.prepare(`PRAGMA table_info(applications)`).all().map((c) => c.name);
+  if (!cols.includes('tracking_token')) {
+    db.exec(`ALTER TABLE applications ADD COLUMN tracking_token TEXT UNIQUE`);
+  }
+  if (!cols.includes('status_updated_at')) {
+    db.exec(`ALTER TABLE applications ADD COLUMN status_updated_at TEXT`);
+  }
+  db.exec(`
+    UPDATE applications SET status_updated_at = created_at WHERE status_updated_at IS NULL;
   `);
 
   return db;
