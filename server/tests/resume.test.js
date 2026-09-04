@@ -74,6 +74,10 @@ test('parseResumeText extracts contact + experience + skills + summary', () => {
   assert.ok(f.skills.includes('node'));
   assert.ok(f.skills.includes('graphql'));
   assert.ok(f.skills.includes('aws'));
+  assert.ok(f.skills.includes('javascript'));
+  assert.ok(f.skills.includes('sql'));
+  assert.ok(!f.skills.includes('java'));
+  assert.ok(!f.skills.includes('c'));
   assert.ok(f.summary.includes('Full-stack engineer'));
   assert.equal(f.location, 'San Francisco, CA');
 });

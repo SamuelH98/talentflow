@@ -6,43 +6,162 @@ import { Avatar, Badge, ChipsInput, Modal, Spinner, EmptyState, STAGE_LABELS, ti
 const STAGE_ORDER = ['matched', 'in_review', 'interview', 'hired'];
 const STAGE_SHORT = { matched: 'Submitted', in_review: 'In review', interview: 'Interview', hired: 'Offer' };
 
-function ApplyModal({ job, onApply, onClose }) {
-  const [form, setForm] = useState({ name: '', email: '', phone: '', summary: '', skills: [], years_experience: 2 });
+function ApplyModal({ job, onApply, onExisting, onClose }) {
+  const [form, setForm] = useState({ name: '', email: '', phone: '', location: '', summary: '', skills: [], years_experience: 2 });
+  const [resumeText, setResumeText] = useState('');
+  const [file, setFile] = useState(null);
+  const [fileStatus, setFileStatus] = useState('');
+  const [parsing, setParsing] = useState(false);
+  const [questions, setQuestions] = useState(null);
+  const [answers, setAnswers] = useState({});
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+
+  useEffect(() => {
+    api.publicQuestionnaire().then((q) => setQuestions(q)).catch(() => {});
+  }, []);
+
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const answer = (key, value) => setAnswers((a) => ({ ...a, [key]: value }));
+
   const quick = () => {
     setForm((f) => ({
       ...f,
       name: 'Taylor Morgan',
       email: 'taylor.morgan@example.com',
       phone: '555-2244',
+      location: 'Austin, TX',
       summary: 'Product-minded engineer who ships fast and loves learning new stacks.',
       skills: [...new Set([...(f.skills || []), ...(job.skills || []).slice(0, 3)])],
       years_experience: 4,
     }));
   };
+
+  const handleFile = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    setFile(f);
+    setFileStatus('');
+    setParsing(true);
+    setErr('');
+    try {
+      const res = await api.resumeParse(f);
+      if (!res.ok) throw new Error('parse failed');
+      setResumeText(res.text || '');
+      const fields = res.fields || {};
+      const filled = [];
+      const next = { ...form };
+      if (fields.name && !next.name) { next.name = fields.name; filled.push('name'); }
+      if (fields.email && !next.email) { next.email = fields.email; filled.push('email'); }
+      if (fields.phone && !next.phone) { next.phone = fields.phone; filled.push('phone'); }
+      if (fields.location && !next.location) { next.location = fields.location; filled.push('location'); }
+      if (fields.years_experience != null) { next.years_experience = fields.years_experience; filled.push('experience'); }
+      if (fields.skills && fields.skills.length) next.skills = [...new Set([...(next.skills || []), ...fields.skills])];
+      if (fields.summary && !next.summary) { next.summary = fields.summary; filled.push('summary'); }
+      setForm(next);
+      setFileStatus(
+        `Parsed ${res.filename} — ${filled.length} fields auto-filled` +
+        (fields.skills && fields.skills.length ? `, ${fields.skills.length} skills detected` : '') +
+        `. Review and edit below before submitting.`
+      );
+    } catch (ex) {
+      setFileStatus('');
+      setErr(ex.message || 'Could not parse that file');
+      setFile(null);
+    } finally {
+      setParsing(false);
+    }
+  };
+
   const submit = async () => {
     setBusy(true); setErr('');
-    try { await onApply({ ...form, job_id: job.id }); }
-    catch (e) { setErr(e.message || 'Something went wrong'); }
-    finally { setBusy(false); }
+    const fd = new FormData();
+    fd.append('job_id', String(job.id));
+    for (const k of ['name', 'email', 'phone', 'location', 'summary', 'years_experience']) fd.append(k, String(form[k] ?? ''));
+    fd.append('skills', JSON.stringify(form.skills || []));
+    if (resumeText.trim()) fd.append('resume_text', resumeText);
+    if (file) fd.append('resume', file, file.name);
+    const q = {};
+    for (const [k, v] of Object.entries(answers)) if (v) q[k] = v;
+    if (Object.keys(q).length) fd.append('questionnaire', JSON.stringify(q));
+    try { await onApply({ formData: fd, name: form.name }); }
+    catch (e) {
+      if (e && e.status === 409 && e.data && e.data.tracking_token && onExisting) {
+        onExisting(e.data.tracking_token);
+        return;
+      }
+      setErr(e.message || 'Something went wrong');
+    } finally {
+      setBusy(false);
+    }
   };
+
   return (
     <Modal title={`Apply — ${job.title}`} icon="briefcase" onClose={onClose}>
       <div className="banner" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
-        <Icon name="clock" /> Takes ~1 minute. We ask only for the essentials.
+        <Icon name="clock" /> Takes ~2 minutes. Upload your resume to auto-fill the rest.
         <button type="button" className="btn small secondary banner-action" onClick={quick}>Try a sample profile</button>
       </div>
       {err && <div className="banner" style={{ background: 'var(--danger-soft)', borderColor: '#f5c2c2', color: '#991b1b' }}><Icon name="shield" />{err}</div>}
       <div className="form-grid">
+        <div className="field full">
+          <label>Resume <span className="muted small">(optional · .pdf, .docx, .txt)</span></label>
+          <label className={`resume-drop ${file ? 'filled' : ''} ${parsing ? 'busy' : ''}`}>
+            <input type="file" accept=".pdf,.docx,.txt" onChange={handleFile} />
+            {parsing ? <Spinner label="Parsing your resume…" /> : file ? (
+              <><Icon name="check" size={18} /><div><b>{file.name}</b><div className="muted small">{fileStatus || 'Resume attached'}</div></div></>
+            ) : (
+              <><Icon name="upload" size={18} /><div><b>Choose a file or drag it here</b><div className="muted small">We'll read it on your computer using local parsing — nothing is uploaded to a cloud service.</div></div></>
+            )}
+          </label>
+          {fileStatus && !parsing && <div className="hint" style={{ color: 'var(--success)' }}><Icon name="check" size={13} /> {fileStatus.split('.')[0]}.</div>}
+        </div>
         <div className="field required"><label>Full name</label><input value={form.name} onChange={(e) => set('name', e.target.value)} /></div>
         <div className="field required"><label>Email</label><input type="email" value={form.email} onChange={(e) => set('email', e.target.value)} /></div>
         <div className="field"><label>Phone</label><input value={form.phone} onChange={(e) => set('phone', e.target.value)} /></div>
+        <div className="field"><label>Location</label><input placeholder="City, State" value={form.location} onChange={(e) => set('location', e.target.value)} /></div>
         <div className="field"><label>Years of experience</label><input type="number" min="0" step="0.5" value={form.years_experience} onChange={(e) => set('years_experience', e.target.value)} /></div>
         <div className="field full"><label>Skills</label><ChipsInput value={form.skills} onChange={(v) => set('skills', v)} /></div>
         <div className="field full"><label>Short summary</label><textarea value={form.summary} onChange={(e) => set('summary', e.target.value)} /></div>
       </div>
+
+      <div className="eeo-section">
+        <div className="eeo-head">
+          <span className="chip-icon"><Icon name="lock" size={16} /></span>
+          <div>
+            <h3 style={{ margin: 0 }}>Voluntary self-identification</h3>
+            <p className="muted small" style={{ margin: 0 }}>Optional — used only for equal employment opportunity reporting, never for hiring decisions.</p>
+          </div>
+        </div>
+        {questions && (
+          <div className="eeo-questions">
+            {questions.questions.map((q) => (
+              <div className="eeo-q" key={q.key}>
+                <div className="small bold">{q.title}</div>
+                {q.sub && <div className="muted small" style={{ marginTop: 2 }}>{q.sub}</div>}
+                <div className="radio-grid">
+                  {q.options.map((o) => (
+                    <label key={o.value} className={`radio-card ${answers[q.key] === o.value ? 'selected' : ''}`}>
+                      <input type="radio" name={q.key} checked={answers[q.key] === o.value} onChange={() => answer(q.key, o.value)} />
+                      <span>{o.label}</span>
+                    </label>
+                  ))}
+                </div>
+                {q.type === 'single-detail' && q.options.some((o) => o.detail && answers[q.key] === o.value) && (
+                  <input className="detail-input" placeholder="How would you describe yourself?" value={answers[q.detailField] || ''} onChange={(e) => answer(q.detailField, e.target.value)} />
+                )}
+                {q.disclosure && (
+                  <details className="disclosure">
+                    <summary>Why we ask?</summary>
+                    <p>{q.disclosure}</p>
+                  </details>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="footer">
         <button className="btn secondary" onClick={onClose}>Cancel</button>
         <button className="btn" onClick={submit} disabled={busy || !form.name || !form.email}>
@@ -266,10 +385,17 @@ export default function CandidatePortal({ authed, onBack }) {
     if (statusToken) window.location.hash = `/portal/status/${statusToken}`;
   }, [statusToken]);
 
-  const apply = async (payload) => {
-    const res = await api.publicApply(payload);
-    setResult({ ...res, name: payload.name });
+  const apply = async ({ formData, name }) => {
+    const res = await api.publicApply(formData);
+    setResult({ ...res, name });
     setApplyJob(null);
+  };
+
+  const existingApplication = (token) => {
+    setApplyJob(null);
+    setResult(null);
+    setTab('track');
+    setStatusToken(token);
   };
 
   const handleTab = (t) => {
@@ -341,7 +467,7 @@ export default function CandidatePortal({ authed, onBack }) {
         <span className="muted small">Your data never leaves this computer.</span>
       </div>
 
-      {applyJob && <ApplyModal job={applyJob} onApply={apply} onClose={() => setApplyJob(null)} />}
+      {applyJob && <ApplyModal job={applyJob} onApply={apply} onExisting={existingApplication} onClose={() => setApplyJob(null)} />}
       {result && <SuccessView applied={result} onDone={(token) => { setResult(null); if (token) { setStatusToken(token); setTab('track'); } }} />}
     </div>
   );

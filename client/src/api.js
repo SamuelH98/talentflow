@@ -11,10 +11,11 @@ export function setToken(token) {
 
 async function request(path, options = {}) {
   const token = getToken();
+  const isForm = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const res = await fetch(`/api${path}`, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      ...(isForm ? {} : { 'Content-Type': 'application/json' }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers || {}),
     },
@@ -26,11 +27,15 @@ async function request(path, options = {}) {
   }
   if (!res.ok) {
     let msg = res.statusText;
+    let data = null;
     try {
-      const data = await res.json();
+      data = await res.json();
       msg = data.error || msg;
     } catch {}
-    throw new Error(msg);
+    const err = new Error(msg);
+    err.status = res.status;
+    err.data = data;
+    throw err;
   }
   return res.json();
 }
@@ -59,9 +64,16 @@ export const api = {
 
   publicJobs: () => request('/public/jobs'),
   publicJob: (id) => request(`/public/jobs/${id}`),
-  publicApply: (data) => request('/public/applications', { method: 'POST', body: JSON.stringify(data) }),
+  publicQuestionnaire: () => request('/public/questionnaire'),
+  resumeParse: (file) => {
+    const fd = new FormData();
+    fd.append('resume', file);
+    return request('/public/resume/parse', { method: 'POST', body: fd });
+  },
+  publicApply: (formData) => request('/public/applications', { method: 'POST', body: formData }),
   publicStatus: (token) => request(`/public/applications/${token}`),
   publicLookup: (email) => request('/public/applications/lookup', { method: 'POST', body: JSON.stringify({ email }) }),
+  candidateResume: (id) => request(`/candidates/${id}/resume`),
 };
 
 export function formatSalary(min, max) {

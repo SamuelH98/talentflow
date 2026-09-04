@@ -9,7 +9,7 @@ TalentFlow — local hiring & candidate-ranking app
 A locally hosted "Workday-lite" where companies add jobs and candidates, and the app automatically scores/ranks the best candidates per job with transparent match breakdowns.
 
 ### Current Status
-Recruiter UI redesigned + public candidate portal shipped. All backend tests passing, seed data present, client builds cleanly. Frontend redesign + portal work is uncommitted (working tree) — next commit is a milestone.
+Recruiter UI redesigned + public candidate portal shipped. Workday-style EEO questions + local resume parsing (upload → auto-fill) implemented with 18 passing server tests; client builds cleanly. All work is uncommitted (working tree) — next commit is a milestone.
 
 ---
 
@@ -63,30 +63,39 @@ Recruiter UI redesigned + public candidate portal shipped. All backend tests pas
 #### Validation
 - `npm run db:seed` now creates 8 applications across all stages (hired 1, interview 3, in_review 3, matched 1) with unique `tracking_token`s so the portal has live-looking data on first run.
 
+### Feature: Workday-style EEO questions + resume parsing (portal apply)
+#### Validation
+- Questionnaire served via `GET /api/public/questionnaire` (5 questions, Workday/OFCCP wording: current employee, gender identity, race/ethnicity, veteran status, disability — each with per-question disclosure + privacy banner).
+- Resume parse endpoint `POST /api/public/resume/parse` extracts text from `.pdf`/`.docx`/`.txt` and auto-fills name/email/phone/location/years/skills/summary; unsupported types (415) and unreadable files (422) handled.
+- Apply is now multipart: stores the resume file on disk + `resume_text` on the candidate, persists sanitized EEO answers to a separate `application_answers` table; recruiter and portal routes never read EEO data (no `answers` key anywhere).
+- Live smoke test against a running server verified questionnaire, parse, and auto-fill; regression added so `java` is not falsely detected from `JavaScript` (word-boundary match).
+#### Tests Added
+- `server/tests/resume.test.js` (7), `server/tests/portal-apply.test.js` (2). Total suite: 18 passing.
+
 ---
 
 ## Current Work
 
 ### Active Feature
-Recruiter UI redesign + candidate portal (frontend) — complete, awaiting commit.
+Workday-style EEO questions + resume parsing (portal) — implemented, awaiting commit.
 
 ### Progress
-- `client/src/styles.css` rewritten as a full design system (brand tokens, KPIs, avatars, badges, tables, modals, toast, stepper, two-pane login, portal styles; responsive @1100/@720).
-- `client/src/Icons.jsx`, `ui.jsx` rebuilt; `Login.jsx` two-pane; `Dashboard.jsx` KPI-driven; `CandidatePortal.jsx` added; `App.jsx` routes `#/portal`.
+- Server: `questionnaire.js`, `resume.js` (extraction + heuristics + aliases), `application_answers` table, resume columns on `candidates`, multipart apply + resume download + multer error handling.
+- Client: `ApplyModal` rewrite in `CandidatePortal.jsx` (resume drop zone → auto-fill, radio-card EEO grid with detail fields + disclosures, 409 duplicate → jump to tracker); `api.js` FormData-aware + `publicQuestionnaire`/`resumeParse`; `Icons.jsx` `upload`/`lock`; new CSS (`resume-drop`, `radio-grid`/`radio-card`, `eeo-*`, `detail-input`, `disclosure`).
+- Docs: README updated (features, routes, layout, portal blurb).
 
 ### Remaining Work
-1. Commit frontend redesign + portal as a milestone.
-2. (Optional) Docs: portal routes added to README next.
+1. Commit frontend/backend milestone (server changes already committed in `432a561`; client + docs + resume-fix pending commit).
+2. (Optional) "View resume" button on the recruiter Candidates view via `GET /api/candidates/:id/resume`.
 
 ---
 
 ## Next Actions
 
-1. **Commit frontend milestone** — `git add` client changes + docs, commit as "Recruiter UI redesign + public candidate portal".
-2. (Optional) Add resume file upload / drag-drop that parses text from PDF/DOCX into `resume_text`.
-3. (Optional) Add candidate "archived" state toggle in UI (backend filter already honors it).
-4. (Optional) Production hardening: set real `JWT_SECRET`, add rate limiting, run behind HTTPS.
-5. (Optional) Public portal hardening when exposed publicly: cap lookup rate, add basic bot protection on `POST /api/public/applications`.
+1. **Commit milestone** — client (ApplyModal, api.js, Icons, styles, CandidatePortal wiring), the `java`-matcher fix + regression test, and README/PROJECT_STATE updates as "Candidate portal: EEO questions + resume upload/auto-fill".
+2. (Optional) Add candidate "archived" state toggle in UI (backend filter already honors it).
+3. (Optional) Production hardening: set real `JWT_SECRET`, add rate limiting, run behind HTTPS.
+4. (Optional) Public portal hardening when exposed publicly: cap lookup rate, add basic bot protection on `POST /api/public/applications`.
 
 ---
 
@@ -118,7 +127,7 @@ Recruiter UI redesign + candidate portal (frontend) — complete, awaiting commi
 
 ## Resume Instructions
 
-- **Verify current state:** `cd ~/git/talentflow/server && npm test` (expect 10 passing), then `cd ~/git/talentflow/client && npm run build`.
+- **Verify current state:** `cd ~/git/talentflow/server && npm test` (expect 18 passing), then `cd ~/git/talentflow/client && npm run build`.
 - **Run the app:** from repo root: `npm run dev` → open http://localhost:5173, log in `demo@acmetalent.com` / `password`; portal at http://localhost:5173/#/portal (status pages live at `#/portal/status/<token>`).
-- **Where to start reading:** `server/src/matching.js` (scoring core, pure functions), `server/src/index.js` (all routes incl. `/api/public/*`), `client/src/App.jsx` (routing), `client/src/CandidatePortal.jsx` (portal UI).
-- **Next concrete step:** commit the frontend redesign + portal milestone.
+- **Where to start reading:** `server/src/matching.js` (scoring core, pure functions), `server/src/index.js` (all routes incl. `/api/public/*`), `server/src/resume.js` (resume extraction + auto-fill heuristics), `server/src/questionnaire.js` (EEO questions), `client/src/App.jsx` (routing), `client/src/CandidatePortal.jsx` (portal UI + ApplyModal).
+- **Next concrete step:** commit the EEO + resume milestone (see Next Actions).

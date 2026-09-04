@@ -45,8 +45,11 @@ const DEFAULT_SKILLS = {
 
 const SKILL_API = Object.entries(DEFAULT_SKILLS).map(([skill, aliases]) => ({ skill, aliases }));
 const SKILL_ALIASES = SKILL_API.flatMap(({ skill, aliases }) => aliases.map((a) => ({ alias: a.trim(), skill })))
-  .filter((s) => s.alias.length >= 2)
   .sort((a, b) => b.alias.length - a.alias.length);
+
+function escapeRe(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 export class UnsupportedResumeError extends Error {
   constructor(ext) {
@@ -128,7 +131,7 @@ export function parseResumeText(text = '') {
   const skills = [];
   for (const { alias, skill } of SKILL_ALIASES) {
     if (skills.includes(skill)) continue;
-    if (lower.includes(alias)) skills.push(skill);
+    if (new RegExp(`(?<![a-z0-9])${escapeRe(alias)}(?![a-z0-9])`, 'i').test(lower)) skills.push(skill);
   }
 
   let summary = null;

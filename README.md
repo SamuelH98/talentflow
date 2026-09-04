@@ -8,7 +8,7 @@ A locally hosted, Workday-style hiring tool that stores your candidate pool and 
 - **Automatic candidate ranking** — every candidate is scored against every job
 - **Transparent scoring** — see the breakdown behind each match (skills, experience fit, years)
 - **Shortlists & pipeline** — move candidates from *matched* → *in review* → *interview* → *hired*
-- **Public candidate portal** — a shareable, no-login careers page: browse open roles, one-click apply, and track application status with a private link
+- **Public candidate portal** — a shareable, no-login careers page: browse open roles, one-click apply, auto-fill from an uploaded resume, complete Workday-style EEO self-identification, and track application status with a private link
 - **Multi-company** — data is scoped per company (log in as different companies and see only your data)
 - **Locally hosted** — SQLite file database, nothing leaves your machine; no external AI API required, works fully offline
 
@@ -40,7 +40,7 @@ Open http://localhost:5173 and sign in with:
 - **Email:** `demo@acmetalent.com`
 - **Password:** `password`
 
-**Candidate portal** (no login needed): http://localhost:5173/#/portal — browse open jobs, apply in under a minute, and track applications. After applying you get a private tracking link (`#/portal/status/<token>`) you can keep or share.
+**Candidate portal** (no login needed): http://localhost:5173/#/portal — browse open jobs, apply in under a minute, and track applications. After applying you get a private tracking link (`#/portal/status/<token>`) you can keep or share. In the apply form you can upload a `.pdf`, `.docx`, or `.txt` resume and the portal auto-fills your details locally (best-effort — review before submitting; scanned/image PDFs can't be read). EEO / self-identification questions follow the standard Workday/OFCCP format; answers are stored for compliance reporting but are deliberately **not visible** in any recruiter pipeline view.
 
 ## Scripts (from repo root)
 
@@ -62,6 +62,8 @@ talentflow/
 │   │   ├── db.js         # SQLite schema + connection
 │   │   ├── matching.js   # pure scoring / ranking logic
 │   │   ├── auth.js       # JWT signing + middleware
+│   │   ├── questionnaire.js # EEO / self-identification question config
+│   │   ├── resume.js     # resume text extraction (.txt/.docx/.pdf) + field auto-fill heuristics
 │   │   └── seed.js       # sample companies/users/candidates/jobs
 │   ├── tests/            # node:test units + API integration
 │   └── data/talentflow.db
@@ -85,11 +87,13 @@ All routes (except `POST /api/auth/login`, `/api/health`, and the `/api/public/*
 
 - `GET /api/public/jobs` — open roles (company-internal fields stripped)
 - `GET /api/public/jobs/:id` — single open role
-- `POST /api/public/applications` — one-click apply (auto-creates the candidate if unknown; a duplicate application returns the existing tracking token as `409`)
+- `GET /api/public/questionnaire` — EEO / self-identification questions (Workday-style, privacy banner included)
+- `POST /api/public/resume/parse` — upload a resume (`.pdf`, `.docx`, `.txt`, max 5 MB) and get back auto-filled contact/skills/summary fields
+- `POST /api/public/applications` — apply (multipart): candidate details + optional `resume` file + `questionnaire` JSON. Auto-creates the candidate if unknown; a duplicate application returns the existing tracking token as `409`
 - `GET /api/public/applications/:token` — application status by private tracking link
 - `POST /api/public/applications/lookup` — list applications for an email address
 
-Internal match scores are never exposed to candidates — the portal shows stage status only.
+Internal match scores are never exposed to candidates — the portal shows stage status only. EEO answers are stored server-side (compliance) but never returned by recruiter or portal routes.
 
 ## Notes
 
