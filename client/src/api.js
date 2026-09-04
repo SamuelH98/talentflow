@@ -56,6 +56,12 @@ export const api = {
   applications: () => request('/applications'),
   createApplication: (data) => request('/applications', { method: 'POST', body: JSON.stringify(data) }),
   updateApplicationStatus: (id, data) => request(`/applications/${id}/status`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+  publicJobs: () => request('/public/jobs'),
+  publicJob: (id) => request(`/public/jobs/${id}`),
+  publicApply: (data) => request('/public/applications', { method: 'POST', body: JSON.stringify(data) }),
+  publicStatus: (token) => request(`/public/applications/${token}`),
+  publicLookup: (email) => request('/public/applications/lookup', { method: 'POST', body: JSON.stringify({ email }) }),
 };
 
 export function formatSalary(min, max) {

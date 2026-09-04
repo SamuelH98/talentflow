@@ -8,6 +8,7 @@ A locally hosted, Workday-style hiring tool that stores your candidate pool and 
 - **Automatic candidate ranking** — every candidate is scored against every job
 - **Transparent scoring** — see the breakdown behind each match (skills, experience fit, years)
 - **Shortlists & pipeline** — move candidates from *matched* → *in review* → *interview* → *hired*
+- **Public candidate portal** — a shareable, no-login careers page: browse open roles, one-click apply, and track application status with a private link
 - **Multi-company** — data is scoped per company (log in as different companies and see only your data)
 - **Locally hosted** — SQLite file database, nothing leaves your machine; no external AI API required, works fully offline
 
@@ -39,6 +40,8 @@ Open http://localhost:5173 and sign in with:
 - **Email:** `demo@acmetalent.com`
 - **Password:** `password`
 
+**Candidate portal** (no login needed): http://localhost:5173/#/portal — browse open jobs, apply in under a minute, and track applications. After applying you get a private tracking link (`#/portal/status/<token>`) you can keep or share.
+
 ## Scripts (from repo root)
 
 | Command | What it does |
@@ -69,7 +72,7 @@ talentflow/
 
 ## API overview
 
-All routes (except `POST /api/auth/login` and `/api/health`) require `Authorization: Bearer <token>`.
+All routes (except `POST /api/auth/login`, `/api/health`, and the `/api/public/*` portal routes) require `Authorization: Bearer <token>`.
 
 - `POST /api/auth/login` — get a JWT (`demo@acmetalent.com` / `password`)
 - `GET|POST /api/candidates`, `PUT|DELETE /api/candidates/:id`
@@ -77,6 +80,16 @@ All routes (except `POST /api/auth/login` and `/api/health`) require `Authorizat
 - `GET /api/jobs/:id/matches` — ranked candidates for one job (with score breakdowns)
 - `GET /api/matches/all` — best candidates per job
 - `GET|POST /api/applications`, `PATCH /api/applications/:id/status`
+
+### Public portal routes (no auth)
+
+- `GET /api/public/jobs` — open roles (company-internal fields stripped)
+- `GET /api/public/jobs/:id` — single open role
+- `POST /api/public/applications` — one-click apply (auto-creates the candidate if unknown; a duplicate application returns the existing tracking token as `409`)
+- `GET /api/public/applications/:token` — application status by private tracking link
+- `POST /api/public/applications/lookup` — list applications for an email address
+
+Internal match scores are never exposed to candidates — the portal shows stage status only.
 
 ## Notes
 
