@@ -94,6 +94,32 @@ export function createDb(dbFile) {
       data TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS screening_questions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      company_id INTEGER NOT NULL REFERENCES companies(id),
+      label TEXT NOT NULL,
+      description TEXT,
+      type TEXT NOT NULL DEFAULT 'text',
+      options TEXT NOT NULL DEFAULT '[]',
+      default_enabled INTEGER NOT NULL DEFAULT 1,
+      default_required INTEGER NOT NULL DEFAULT 0,
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS job_screening_questions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_id INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+      question_id INTEGER NOT NULL REFERENCES screening_questions(id) ON DELETE CASCADE,
+      position INTEGER NOT NULL DEFAULT 0,
+      required INTEGER NOT NULL DEFAULT 0,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      UNIQUE(job_id, question_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_screening_company ON screening_questions(company_id);
+    CREATE INDEX IF NOT EXISTS idx_job_screening_job ON job_screening_questions(job_id);
   `);
 
   const candCols = db.prepare(`PRAGMA table_info(candidates)`).all().map((c) => c.name);

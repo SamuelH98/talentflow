@@ -10,6 +10,16 @@ import { requireAuth, signToken } from './auth.js';
 import { scoreCandidate, rankCandidates, parseSkills } from './matching.js';
 import { readResume, UnsupportedResumeError } from './resume.js';
 import { QUESTIONNAIRE, questionnairePublic } from './questionnaire.js';
+import {
+  effectiveQuestions,
+  getLibrary,
+  jobConfig,
+  sanitizeScreeningAnswers,
+  saveJobQuestionConfig,
+  screeningAnswersForApplication,
+  ScreenQuestionValidation,
+  validateQuestionInput,
+} from './screening.js';
 
 const app = express();
 app.use(cors());
@@ -213,6 +223,94 @@ app.delete('/api/jobs/:id', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------- Screening questions ----------
+
+function libraryItem(db, q, jobCount) {
+  return {
+    id: q.id,
+    label: q.label,
+    description: q.description,
+    type: q.type,
+    options: q.options,
+    default_enabled: !!q.default_enabled,
+    default_required: !!q.default_required,
+    jobs_using: jobCount ? jobCount.get(q.id) || 0 : undefined,
+  };
+}
+
+app.get('/api/screening/questions', requireAuth, (req, res) => {
+  const db = getDb();
+  const library = getLibrary(db, req.user.company_id);
+  const jobs = db
+    .prepare('SELECT question_id, COUNT(*) AS n FROM job_screening_questions GROUP BY question_id')
+    .all();
+  const jobCount = new Map(jobs.map((j) => [j.question_id, j.n]));
+  res.json(library.map((q) => libraryItem(db, q, jobCount)));
+});
+
+app.post('/api/screening/questions', requireAuth, (req, res) => {
+  const db = getDb();
+  let input;
+  try {
+    input = validateQuestionInput(req.body || {});
+  } catch (e) {
+    if (e instanceof ScreenQuestionValidation) return res.status(400).json({ error: e.message });
+    throw e;
+  }
+  const max = db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM screening_questions WHERE company_id = ?').get(req.user.company_id).m;
+  const info = db
+    .prepare(
+      `INSERT INTO screening_questions (company_id, label, description, type, options, default_enabled, default_required, position)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(req.user.company_id, input.label, input.description, input.type, JSON.stringify(input.options), input.default_enabled, input.default_required, max + 1);
+  res.status(201).json(libraryItem(db, getLibrary(db, req.user.company_id).find((q) => q.id === info.lastInsertRowid)));
+});
+
+app.put('/api/screening/questions/:id', requireAuth, (req, res) => {
+  const db = getDb();
+  const existing = db.prepare('SELECT * FROM screening_questions WHERE id = ? AND company_id = ?').get(req.params.id, req.user.company_id);
+  if (!existing) return res.status(404).json({ error: 'Question not found' });
+  let input;
+  try {
+    input = validateQuestionInput(req.body || {});
+  } catch (e) {
+    if (e instanceof ScreenQuestionValidation) return res.status(400).json({ error: e.message });
+    throw e;
+  }
+  db.prepare(
+    `UPDATE screening_questions SET label = ?, description = ?, type = ?, options = ?, default_enabled = ?, default_required = ? WHERE id = ?`
+  ).run(input.label, input.description, input.type, JSON.stringify(input.options), input.default_enabled, input.default_required, existing.id);
+  res.json(libraryItem(db, getLibrary(db, req.user.company_id).find((q) => q.id === existing.id)));
+});
+
+app.delete('/api/screening/questions/:id', requireAuth, (req, res) => {
+  const db = getDb();
+  const info = db.prepare('DELETE FROM screening_questions WHERE id = ? AND company_id = ?').run(req.params.id, req.user.company_id);
+  if (!info.changes) return res.status(404).json({ error: 'Question not found' });
+  res.json({ ok: true });
+});
+
+app.get('/api/jobs/:id/screening', requireAuth, (req, res) => {
+  const db = getDb();
+  const job = db.prepare('SELECT * FROM jobs WHERE id = ? AND company_id = ?').get(req.params.id, req.user.company_id);
+  if (!job) return res.status(404).json({ error: 'Job not found' });
+  res.json(jobConfig(db, req.user.company_id, job.id));
+});
+
+app.put('/api/jobs/:id/screening', requireAuth, (req, res) => {
+  const db = getDb();
+  const job = db.prepare('SELECT * FROM jobs WHERE id = ? AND company_id = ?').get(req.params.id, req.user.company_id);
+  if (!job) return res.status(404).json({ error: 'Job not found' });
+  try {
+    const questions = saveJobQuestionConfig(db, req.user.company_id, job.id, (req.body || {}).questions);
+    res.json({ inherited: false, questions });
+  } catch (e) {
+    if (e instanceof ScreenQuestionValidation) return res.status(400).json({ error: e.message });
+    throw e;
+  }
+});
+
 // ---------- Matching ----------
 
 app.get('/api/jobs/:id/matches', requireAuth, (req, res) => {
@@ -252,7 +350,7 @@ app.get('/api/applications', requireAuth, (req, res) => {
   const db = getDb();
   const rows = db
     .prepare(
-      `SELECT a.*, j.title AS job_title, c.name AS candidate_name, c.skills AS candidate_skills
+      `SELECT a.*, j.company_id AS company_id, j.title AS job_title, c.name AS candidate_name, c.skills AS candidate_skills
        FROM applications a
        JOIN jobs j ON j.id = a.job_id
        JOIN candidates c ON c.id = a.candidate_id
@@ -260,7 +358,13 @@ app.get('/api/applications', requireAuth, (req, res) => {
        ORDER BY a.created_at DESC`
     )
     .all(req.user.company_id, req.user.company_id);
-  res.json(rows.map((r) => ({ ...r, candidate_skills: parseSkills(r.candidate_skills) })));
+  res.json(
+    rows.map((r) => ({
+      ...r,
+      candidate_skills: parseSkills(r.candidate_skills),
+      screening_answers: screeningAnswersForApplication(db, r),
+    }))
+  );
 });
 
 app.post('/api/applications', requireAuth, (req, res) => {
@@ -305,7 +409,9 @@ app.get('/api/public/jobs', (req, res) => {
   const rows = db
     .prepare('SELECT * FROM jobs WHERE company_id = ? AND status = ? ORDER BY created_at DESC')
     .all(company.id, 'open');
-  res.json(rows.map(jobRow).map(scrubJob));
+  res.json(
+    rows.map((j) => ({ ...scrubJob(jobRow(j)), screening_questions: effectiveQuestions(db, company.id, j.id) }))
+  );
 });
 
 app.get('/api/public/jobs/:id', (req, res) => {
@@ -316,7 +422,7 @@ app.get('/api/public/jobs/:id', (req, res) => {
     .prepare('SELECT * FROM jobs WHERE id = ? AND company_id = ? AND status = ?')
     .get(req.params.id, company.id, 'open');
   if (!job) return res.status(404).json({ error: 'Job not found' });
-  res.json(scrubJob(jobRow(job)));
+  res.json({ ...scrubJob(jobRow(job)), screening_questions: effectiveQuestions(db, company.id, job.id) });
 });
 
 app.get('/api/public/questionnaire', (req, res) => {
@@ -378,6 +484,15 @@ app.post('/api/public/applications', upload.single('resume'), async (req, res) =
   const job = db.prepare('SELECT * FROM jobs WHERE id = ? AND company_id = ? AND status = ?').get(job_id, company.id, 'open');
   if (!job) return res.status(404).json({ error: 'Job not found or no longer open' });
 
+  const screeningInput = safeJson(body.screening) || body.screening;
+  const screening = sanitizeScreeningAnswers(effectiveQuestions(db, company.id, job.id), screeningInput);
+  if (Object.keys(screening.errors).length > 0) {
+    return res.status(422).json({
+      error: 'Please answer all required questions',
+      missing: Object.values(screening.errors),
+    });
+  }
+
   let resume = { resume_text: null, resume_filename: null, resume_path: null, attached: false };
   if (req.file) {
     try {
@@ -431,9 +546,11 @@ app.post('/api/public/applications', upload.single('resume'), async (req, res) =
     .prepare("INSERT INTO applications (job_id, candidate_id, tracking_token, status_updated_at) VALUES (?, ?, ?, datetime('now'))")
     .run(job_id, candidateId, token);
 
-  if (Object.keys(questionnaire).length > 0) {
+  const eeoKeys = Object.keys(questionnaire);
+  const screeningKeys = Object.keys(screening.answers);
+  if (eeoKeys.length > 0 || screeningKeys.length > 0) {
     db.prepare('INSERT INTO application_answers (application_id, data) VALUES (?, ?)')
-      .run(info.lastInsertRowid, JSON.stringify(questionnaire));
+      .run(info.lastInsertRowid, JSON.stringify({ eeo: questionnaire, screening: screening.answers }));
   }
 
   res.status(201).json({

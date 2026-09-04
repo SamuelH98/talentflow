@@ -156,6 +156,38 @@ if (jobCount === 0) {
   tx();
 }
 
+const qCount = db.prepare('SELECT COUNT(*) AS n FROM screening_questions WHERE company_id = ?').get(companyId).n;
+if (qCount === 0) {
+  const insertQ = db.prepare(
+    `INSERT INTO screening_questions (company_id, label, description, type, options, default_enabled, default_required, position)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  const questions = [
+    {
+      label: 'How did you hear about this role?', description: 'A quick one-liner is fine.', type: 'text',
+      options: [], default_enabled: 1, default_required: 0,
+    },
+    {
+      label: 'Are you legally authorized to work in the country where this role is located?',
+      description: null, type: 'single',
+      options: [
+        { value: 'yes', label: 'Yes, on a permanent basis' },
+        { value: 'sponsor', label: 'Yes, but I will need visa sponsorship' },
+        { value: 'no', label: 'No' },
+      ],
+      default_enabled: 1, default_required: 1,
+    },
+    {
+      label: 'Tell us about a project you are especially proud of.',
+      description: 'What did you build, and what was your impact?', type: 'paragraph',
+      options: [], default_enabled: 0, default_required: 0,
+    },
+  ];
+  questions.forEach((q, i) => {
+    insertQ.run(companyId, q.label, q.description, q.type, JSON.stringify(q.options), q.default_enabled, q.default_required, i);
+  });
+}
+
 const appCount = db.prepare('SELECT COUNT(*) AS n FROM applications').get().n;
 if (appCount === 0) {
   const rows = db
@@ -186,6 +218,36 @@ if (appCount === 0) {
   pick('Grace Liu', 'Machine Learning Engineer', 'in_review', 2);
   pick('Aisha Khan', 'Backend Engineer (Node.js)', 'hired', 12);
   pick('Daniel Osei', 'Backend Engineer (Node.js)', 'matched', 0);
+
+  const qs = db
+    .prepare('SELECT id, label FROM screening_questions WHERE company_id = ?')
+    .all(companyId)
+    .reduce((m, q) => ({ ...m, [q.label]: q.id }), {});
+  const qid = (label) => qs[label];
+  const addAnswers = (cname, screening) => {
+    const app = db
+      .prepare(
+        `SELECT a.id FROM applications a
+         JOIN candidates c ON c.id = a.candidate_id
+         WHERE c.name = ? ORDER BY a.created_at DESC LIMIT 1`
+      )
+      .get(cname);
+    if (!app) return;
+    db.prepare('INSERT INTO application_answers (application_id, data) VALUES (?, ?)').run(
+      app.id,
+      JSON.stringify({ eeo: {}, screening })
+    );
+  };
+  if (qid('How did you hear about this role?')) {
+    addAnswers('Sara Chen', {
+      [qid('How did you hear about this role?')]: 'Saw the role on a tech job board and checked out your careers page.',
+      [qid('Are you legally authorized to work in the country where this role is located?')]: 'yes',
+    });
+    addAnswers('Aisha Khan', {
+      [qid('How did you hear about this role?')]: 'Referred by a former teammate on the platform team.',
+      [qid('Are you legally authorized to work in the country where this role is located?')]: 'yes',
+    });
+  }
 }
 
 console.log('Seed complete.');

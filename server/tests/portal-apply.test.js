@@ -104,12 +104,13 @@ test('portal: questionnaire, resume auto-fill, apply with EEO answers + uploaded
     const answers = db.prepare('SELECT * FROM application_answers WHERE application_id = ?').get(appRow.id);
     assert.ok(answers, 'EEO answers stored');
     const data = JSON.parse(answers.data);
-    assert.equal(data.current_employee, 'no');
-    assert.equal(data.gender, 'self_identify');
-    assert.equal(data.gender_detail, 'Agender');
-    assert.equal(data.race_ethnicity, 'asian');
-    assert.equal(data.disability, 'yes');
-    assert.ok(!('evil_key' in data), 'unknown answer keys are dropped');
+    assert.equal(data.eeo.current_employee, 'no');
+    assert.equal(data.eeo.gender, 'self_identify');
+    assert.equal(data.eeo.gender_detail, 'Agender');
+    assert.equal(data.eeo.race_ethnicity, 'asian');
+    assert.equal(data.eeo.disability, 'yes');
+    assert.deepEqual(data.screening, {});
+    assert.ok(!('evil_key' in data.eeo), 'unknown answer keys are dropped');
 
     // recruiter applications listing (a.*) cannot contain answer data by construction
     assert.ok(!Object.keys(appRow).includes('answers'), 'applications table is answer-free');
