@@ -2,15 +2,31 @@ import express from 'express';
 import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import { getDb } from './db.js';
+import fs from 'fs';
+import path from 'path';
+import multer from 'multer';
+import { getDb, uploadsDir } from './db.js';
 import { requireAuth, signToken } from './auth.js';
 import { scoreCandidate, rankCandidates, parseSkills } from './matching.js';
+import { readResume, UnsupportedResumeError } from './resume.js';
+import { QUESTIONNAIRE, questionnairePublic } from './questionnaire.js';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 4000;
+
+const RESUME_EXT = ['pdf', 'docx', 'txt'];
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ext = String((file.originalname || '').split('.').pop() || '').toLowerCase();
+    if (RESUME_EXT.includes(ext)) cb(null, true);
+    else cb(new Error('Unsupported file type. Use .pdf, .docx, or .txt'));
+  },
+});
 
 const PUBLIC_STAGES = ['matched', 'in_review', 'interview', 'hired'];
 
@@ -125,6 +141,17 @@ app.delete('/api/candidates/:id', requireAuth, (req, res) => {
   const info = db.prepare('DELETE FROM candidates WHERE id = ? AND company_id = ?').run(req.params.id, req.user.company_id);
   if (!info.changes) return res.status(404).json({ error: 'Candidate not found' });
   res.json({ ok: true });
+});
+
+app.get('/api/candidates/:id/resume', requireAuth, (req, res) => {
+  const db = getDb();
+  const row = db
+    .prepare('SELECT id, resume_path, resume_filename FROM candidates WHERE id = ? AND company_id = ?')
+    .get(req.params.id, req.user.company_id);
+  if (!row || !row.resume_path) return res.status(404).json({ error: 'No resume on file for this candidate' });
+  const file = path.join(uploadsDir, path.basename(row.resume_path));
+  if (!fs.existsSync(file)) return res.status(404).json({ error: 'Resume file is missing' });
+  res.download(file, row.resume_filename || path.basename(file));
 });
 
 // ---------- Jobs ----------
@@ -292,14 +319,77 @@ app.get('/api/public/jobs/:id', (req, res) => {
   res.json(scrubJob(jobRow(job)));
 });
 
-app.post('/api/public/applications', (req, res) => {
+app.get('/api/public/questionnaire', (req, res) => {
+  res.json(questionnairePublic());
+});
+
+app.post('/api/public/resume/parse', upload.single('resume'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded. Send the resume as a "resume" file field.' });
+  try {
+    const parsed = await readResume({ buffer: req.file.buffer, filename: req.file.originalname });
+    if (!parsed.text || !parsed.text.trim()) {
+      return res.status(422).json({ error: 'No text could be read from this file. Scanned/image-only PDFs aren\u2019t supported yet.' });
+    }
+    res.json({ ok: true, filename: req.file.originalname, ext: parsed.ext, text: parsed.text, fields: parsed.fields });
+  } catch (e) {
+    if (e instanceof UnsupportedResumeError) return res.status(415).json({ error: e.message });
+    res.status(422).json({ error: 'Could not read this file. Please try a different resume.' });
+  }
+});
+
+function safeJson(value) {
+  if (value == null || value === '') return null;
+  try { return JSON.parse(value); } catch { return null; }
+}
+
+function sanitizedAnswers(answers) {
+  const out = {};
+  if (!answers || typeof answers !== 'object') return out;
+  for (const q of QUESTIONNAIRE) {
+    const v = answers[q.key];
+    if (typeof v !== 'string') continue;
+    if (q.options.some((o) => o.value === v)) out[q.key] = v;
+    if (q.detailField && typeof answers[q.detailField] === 'string' && answers[q.detailField].trim()) {
+      out[q.detailField] = answers[q.detailField].trim().slice(0, 200);
+    }
+  }
+  return out;
+}
+
+function storeResumeFile(file) {
+  const ext = String((file.originalname || '').split('.').pop() || '').toLowerCase();
+  const stored = `${crypto.randomUUID()}.${ext}`;
+  fs.writeFileSync(path.join(uploadsDir, stored), file.buffer);
+  return {
+    resume_filename: path.basename(file.originalname || stored),
+    resume_path: stored,
+  };
+}
+
+app.post('/api/public/applications', upload.single('resume'), async (req, res) => {
   const db = getDb();
-  const { job_id, name, email, phone, location, summary, skills, years_experience } = req.body || {};
+  const body = req.body || {};
+  const { job_id, name, email, phone, location, summary, years_experience } = body;
+  const skills = Array.isArray(body.skills) ? body.skills : (safeJson(body.skills) || []);
+  const questionnaire = sanitizedAnswers(safeJson(body.questionnaire) || body.questionnaire);
   if (!job_id || !name || !email) return res.status(400).json({ error: 'name, email and job_id are required' });
   const company = getDefaultCompany(db);
   if (!company) return res.status(404).json({ error: 'No company configured' });
   const job = db.prepare('SELECT * FROM jobs WHERE id = ? AND company_id = ? AND status = ?').get(job_id, company.id, 'open');
   if (!job) return res.status(404).json({ error: 'Job not found or no longer open' });
+
+  let resume = { resume_text: null, resume_filename: null, resume_path: null, attached: false };
+  if (req.file) {
+    try {
+      const parsed = await readResume({ buffer: req.file.buffer, filename: req.file.originalname });
+      resume = { resume_text: parsed.text || null, ...storeResumeFile(req.file), attached: true };
+    } catch (e) {
+      if (e instanceof UnsupportedResumeError) return res.status(415).json({ error: e.message });
+      return res.status(422).json({ error: 'Could not read this file. Please try a different resume.' });
+    }
+  } else if (typeof body.resume_text === 'string' && body.resume_text.trim()) {
+    resume.resume_text = body.resume_text.trim();
+  }
 
   const existing = db.prepare('SELECT * FROM candidates WHERE company_id = ? AND email = ?').get(company.id, email);
   let candidateId;
@@ -316,27 +406,43 @@ app.post('/api/public/applications', (req, res) => {
       });
     }
   } else {
-    candidateId = db
+    const info = db
       .prepare(
-        `INSERT INTO candidates (company_id, name, email, phone, location, title, summary, years_experience, skills)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO candidates (company_id, name, email, phone, location, title, summary, years_experience, skills, resume_text, resume_filename, resume_path)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         company.id, name, email, phone || null, location || null, job.title || null,
-        summary || null, Number(years_experience) || 0, JSON.stringify(skills || [])
-      ).lastInsertRowid;
+        summary || null, Number(years_experience) || 0, JSON.stringify(skills || []) ,
+        resume.resume_text, resume.resume_filename, resume.resume_path
+      );
+    candidateId = info.lastInsertRowid;
+  }
+
+  if (resume.attached && existing) {
+    db.prepare('UPDATE candidates SET resume_text = ?, resume_filename = ?, resume_path = ? WHERE id = ?')
+      .run(resume.resume_text || existing.resume_text, resume.resume_filename, resume.resume_path, candidateId);
+  } else if (resume.resume_text && existing && !existing.resume_text) {
+    db.prepare('UPDATE candidates SET resume_text = ? WHERE id = ?').run(resume.resume_text, candidateId);
   }
 
   const token = crypto.randomUUID();
   const info = db
     .prepare("INSERT INTO applications (job_id, candidate_id, tracking_token, status_updated_at) VALUES (?, ?, ?, datetime('now'))")
     .run(job_id, candidateId, token);
+
+  if (Object.keys(questionnaire).length > 0) {
+    db.prepare('INSERT INTO application_answers (application_id, data) VALUES (?, ?)')
+      .run(info.lastInsertRowid, JSON.stringify(questionnaire));
+  }
+
   res.status(201).json({
     id: info.lastInsertRowid,
     tracking_token: token,
     status: 'matched',
     job: { id: job.id, title: job.title, department: job.department, location: job.location },
     applied_at: new Date().toISOString(),
+    resume_attached: resume.attached,
   });
 });
 
@@ -377,6 +483,17 @@ app.post('/api/public/applications/lookup', (req, res) => {
 });
 
 export { app };
+
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    const error = err.code === 'LIMIT_FILE_SIZE' ? 'File too large (max 5 MB)' : err.message;
+    return res.status(400).json({ error });
+  }
+  if (err && err.message === 'Unsupported file type. Use .pdf, .docx, or .txt') {
+    return res.status(415).json({ error: err.message });
+  }
+  next(err);
+});
 
 if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, () => console.log(`TalentFlow API listening on http://localhost:${PORT}`));

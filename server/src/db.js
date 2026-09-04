@@ -7,6 +7,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.join(__dirname, '..', 'data');
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
+export const uploadsDir = process.env.UPLOADS_DIR || path.join(dataDir, 'uploads');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
 function dbPath() {
   return process.env.DB_PATH || path.join(dataDir, 'talentflow.db');
 }
@@ -48,6 +51,8 @@ export function createDb(dbFile) {
       education TEXT NOT NULL DEFAULT '[]',
       status TEXT NOT NULL DEFAULT 'active',
       resume_text TEXT,
+      resume_filename TEXT,
+      resume_path TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -83,7 +88,21 @@ export function createDb(dbFile) {
     CREATE INDEX IF NOT EXISTS idx_candidates_company ON candidates(company_id);
     CREATE INDEX IF NOT EXISTS idx_jobs_company ON jobs(company_id);
     CREATE INDEX IF NOT EXISTS idx_applications_job ON applications(job_id);
+
+    CREATE TABLE IF NOT EXISTS application_answers (
+      application_id INTEGER PRIMARY KEY REFERENCES applications(id) ON DELETE CASCADE,
+      data TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
+
+  const candCols = db.prepare(`PRAGMA table_info(candidates)`).all().map((c) => c.name);
+  if (!candCols.includes('resume_filename')) {
+    db.exec(`ALTER TABLE candidates ADD COLUMN resume_filename TEXT`);
+  }
+  if (!candCols.includes('resume_path')) {
+    db.exec(`ALTER TABLE candidates ADD COLUMN resume_path TEXT`);
+  }
 
   const cols = db.prepare(`PRAGMA table_info(applications)`).all().map((c) => c.name);
   if (!cols.includes('tracking_token')) {
