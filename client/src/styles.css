@@ -500,6 +500,18 @@ table.data tbody tr:hover td { background: var(--surface-2); }
   border-radius: var(--radius-sm); padding: 12px 14px;
 }
 
+.consent-row {
+  display: flex; gap: 10px; align-items: flex-start; cursor: pointer;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 14px; font-size: 13.5px; line-height: 1.5;
+}
+.consent-row input { margin-top: 3px; accent-color: var(--primary); }
+
+/* ---------- Manage my data (portal) ---------- */
+
+.manage-export .breakdown { margin: 0; }
+.manage-export .breakdown-row { font-size: 13px; }
+
 /* ---------- Modal ---------- */
 
 .modal-backdrop {

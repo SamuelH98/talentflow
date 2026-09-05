@@ -89,6 +89,7 @@ test('portal: questionnaire, resume auto-fill, apply with EEO answers + uploaded
         email: 'jane.eng@example.dev',
         skills: ['Python', 'PostgreSQL', 'Docker'],
         years_experience: 6,
+        consent: true,
         questionnaire,
         resume_text: resumeText,
       }),
@@ -134,6 +135,7 @@ test('portal: questionnaire, resume auto-fill, apply with EEO answers + uploaded
           email: 'priya.file@example.dev',
           skills: JSON.stringify(['Python']),
           years_experience: '4',
+          consent: 'true',
           questionnaire: JSON.stringify({ current_employee: 'decline', gender: 'female' }),
         },
         { name: 'resume', filename: 'priya.txt', type: 'text/plain', buffer: txtBody }

@@ -14,9 +14,9 @@ Legend: ✅ shipped · 🔨 in progress · 🛣️ on the roadmap · ⛔ deliber
 | **Pipeline / kanban** | required | 🔨 | Statuses exist (matched → review → interview → hired); visual kanban is next |
 | **Automatic resume parsing** | required | ✅ | `.pdf` / `.docx` / `.txt`, 5 MB cap, auto-fills contact + skills + summary (local, no cloud) |
 | **EEO / self-identification** (Workday-style) | required | ✅ | OFCCP-style questions, disclosure per question, stored but never shown in pipeline views |
-| **Candidate consent + privacy** | required | ✅ | Consent stored with timestamp + policy version on every application |
-| **Right-to-erasure (DSAR) management** | required | 🔨 | Portal "Manage my data" → export + erasure flow are in progress |
-| **Audit log** (who did what, when) | required | 🔨 | Planning a lightweight recruiter action log |
+| **Candidate consent + privacy** | required | ✅ | Consent stored with timestamp + policy version on every application; non-consenting applications are rejected |
+| **Right-to-erasure (DSAR) management** | required | ✅ | Portal "Manage my data": export a portable JSON copy and request full erasure (candidate + applications + answers + resume file) gated by a proof token |
+| **Audit log** (who did what, when) | required | ✅ | Company-scoped recruiter action log (sign-ins, candidate/job changes, stage changes, self-service erasures) |
 | **Role-based access + multiple users** | expected | 🛣️ | Single recruiter role today; multi-user + roles are roadmap |
 | **Candidate communications / templates** | expected | 🛣️ | Not yet |
 | **Interview scheduling + scorecards** | expected | 🛣️ | Not yet |

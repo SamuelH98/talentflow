@@ -7,8 +7,23 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.join(__dirname, '..', 'data');
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
-export const uploadsDir = process.env.UPLOADS_DIR || path.join(dataDir, 'uploads');
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+const defaultUploadsDir = path.join(dataDir, 'uploads');
+
+// Resolved at request time so it honors the configured env at the moment a
+// write happens (tests / containers can point it anywhere).
+export function resolveUploadsDir() {
+  return process.env.UPLOADS_DIR || defaultUploadsDir;
+}
+
+function ensureUploadsDir() {
+  const dir = resolveUploadsDir();
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+// Legacy static alias (module-load-time) for code that uses it at import time.
+export const uploadsDir = defaultUploadsDir;
+ensureUploadsDir();
 
 function dbPath() {
   return process.env.DB_PATH || path.join(dataDir, 'talentflow.db');
@@ -95,6 +110,19 @@ export function createDb(dbFile) {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      company_id INTEGER,
+      user_id INTEGER,
+      user_email TEXT,
+      action TEXT NOT NULL,
+      detail TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_audit_company ON audit_log(company_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
+
     CREATE TABLE IF NOT EXISTS screening_questions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       company_id INTEGER NOT NULL REFERENCES companies(id),
@@ -137,8 +165,18 @@ export function createDb(dbFile) {
   if (!cols.includes('status_updated_at')) {
     db.exec(`ALTER TABLE applications ADD COLUMN status_updated_at TEXT`);
   }
+  // Applicant consent tracking (privacy milestone). Introduced after v0.1.0;
+  // pre-policy rows get a synthetic consent record so the migration stays safe.
+  const hasConsent = db.prepare(`PRAGMA table_info(applications)`).all().map((c) => c.name);
+  if (!hasConsent.includes('consented_at')) {
+    db.exec(`ALTER TABLE applications ADD COLUMN consented_at TEXT`);
+  }
+  if (!hasConsent.includes('policy_version')) {
+    db.exec(`ALTER TABLE applications ADD COLUMN policy_version TEXT`);
+  }
   db.exec(`
-    UPDATE applications SET status_updated_at = created_at WHERE status_updated_at IS NULL;
+    UPDATE applications SET consented_at = created_at WHERE consented_at IS NULL;
+    UPDATE applications SET policy_version = '2026-09-01' WHERE policy_version IS NULL;
   `);
 
   return db;

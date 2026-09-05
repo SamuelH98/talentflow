@@ -158,13 +158,17 @@ test('screening questions: library, per-job config, answers', async (t) => {
     });
 
     const apply = (body) => jsonReq(base, 'POST', '/api/public/applications', null, body);
-    const blockedRes = await apply({ job_id: jobId, name: 'Bob', email: 'bob@x.com', screening: { [workAuthId]: 'yes' } });
+    const blockedRes = await apply({ job_id: jobId, name: 'Bob', email: 'bob@x.com', consent: true, screening: { [workAuthId]: 'yes' } });
     assert.equal(blockedRes.status, 422);
     const blocked = await blockedRes.json();
     assert.deepEqual(blocked.missing, ['Which stacks have you used?']);
 
+    const noConsentRes = await apply({ job_id: jobId, name: 'Bob', email: 'bob@x.com', screening: { [workAuthId]: 'yes', [stackId]: ['react'] } });
+    assert.equal(noConsentRes.status, 422, 'apply without consent is rejected');
+
     const ok = await (await apply({
       job_id: jobId, name: 'Bob', email: 'bob@x.com',
+      consent: true,
       screening: {
         [workAuthId]: 'yes',
         [stackId]: ['react', 'not-a-stack'],
@@ -193,6 +197,9 @@ test('screening questions: library, per-job config, answers', async (t) => {
 
     const status = await (await fetch(`${base}/api/public/applications/${ok.tracking_token}`)).json();
     assert.ok(!('screening' in status) && !('answers' in status));
+    assert.ok(status.consent, 'status exposes consent metadata');
+    assert.ok(status.consent.consented_at, 'consent timestamp recorded');
+    assert.equal(appRow.policy_version, '2026-09-01');
 
     // deleted questions: stored answers still surface with a fallback label
     const goneId = db.prepare('INSERT INTO screening_questions (company_id, label, type, options) VALUES (?,?,?,?)').run(co, 'Gone', 'text', '[]').lastInsertRowid;

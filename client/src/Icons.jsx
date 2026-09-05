@@ -32,6 +32,7 @@ const I = {
   moon: <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" />,
   chevronUp: <path d="M6 15l6-6 6 6" />,
   trash: <><path d="M4 7h16M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7M6 7l1 13h10l1-13M10 11v5M14 11v5" /></>,
+  download: <><path d="M12 4v11M7 11l5 5 5-5" /><path d="M4 20h16" /></>,
 };
 
 export function Icon({ name, size = 18, className = '', strokeWidth = 1.8 }) {

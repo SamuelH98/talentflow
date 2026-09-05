@@ -9,9 +9,9 @@ TalentFlow — local hiring & candidate-ranking app
 A locally hosted "Workday-lite" where companies add jobs and candidates, and the app automatically scores/ranks the best candidates per job with transparent match breakdowns.
 
 ### Current Status
-Recruiter UI + public candidate portal shipped. EEO questions + local resume parsing, recruiter-managed screening questions (library + per-job config), and recruiter-only dark mode (OS default + toggle + company brand in topbar) all implemented with **22 passing server tests**; client builds cleanly. Screening + dark mode client work committed (`1e6e022`).
+Recruiter UI + public candidate portal shipped. EEO questions + local resume parsing, recruiter-managed screening questions (library + per-job config), recruiter-only dark mode (OS default + toggle + company brand in topbar), publishability packing (AGPL, Docker, prod serving — committed `0d00bfc`), and candidate privacy/consent + audit log (Milestone B) all implemented with **23 passing server tests**; client builds cleanly.
 
-Publishability milestone in progress: AGPL-3.0 `LICENSE`, `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`, production static serving (Express serves `client/dist` with SPA fallback), multi-stage `Dockerfile` + `docker-compose.yml` (healthchecked, image build + `docker run` verified: SPA, `/api/health`, login, authed `/api/jobs` all pass in-container, health = `healthy`), env hardening (`JWT_SECRET` production guard, `SEED_ON_BOOT` demo seed, `DB_PATH`/`UPLOADS_DIR` honored by seed), `docs/FEATURES.md` ATS matrix. Uncommitted: dark-mode row fix + all of the above.
+Milestone B (candidate privacy + consent) is implemented and documented: applications require consent (stored `consented_at` + `policy_version`), the portal offers "Manage my data" (portable JSON export + token-gated full erasure incl. the resume file), the recruiter UI has an Activity log (company-scoped audit trail with sign-ins, candidate/job changes, stage changes, self-service erasures), and end-to-end smoke tests verified apply → export → erasure → audit over HTTP. Remaining: client build + the Milestone B commit.
 
 ---
 
@@ -23,6 +23,16 @@ Publishability milestone in progress: AGPL-3.0 `LICENSE`, `CODE_OF_CONDUCT.md`, 
 - Live smoke test against a running server: 3 seeded questions in library, `GET /api/jobs/:id/screening` returns inherited config with per-question flags, and `GET /api/applications` returns labelled screening answers for Sara Chen + Aisha Khan.
 #### Tests Added
 - `server/tests/screening.test.js` — 3 subtests; `server/tests/portal-apply.test.js` updated for nested `{eeo, screening}` answers. Total suite: 22 passing.
+
+### Feature: Candidate privacy, consent & audit log (Milestone B)
+#### Validation
+- **Consent gate:** `POST /api/public/applications` rejects applications without `consent` (422); approved ones store `consented_at` + `policy_version` (legacy rows backfilled on migration). Verified via `tests/privacy.test.js` and live producer (no-consent → 422; with consent → matched).
+- **Decoupled resume storage fix:** `db.js` gained `resolveUploadsDir()` (env resolved at request time) — root cause of a flaky test where `node --test` shares module state and ignored a late-set `UPLOADS_DIR`; writes now go to the configured dir and erasure deletes the file from disk.
+- **DSAR export:** `GET/POST /api/public/export` returns candidate + applications + answers + consent records + resume filename + `erasure_token` (an application `tracking_token`) + `erasure_note`; unknown emails → 404.
+- **Right-to-erasure:** `POST /api/public/erasure` requires `email` + `erasure_token` matching one of the candidate's application tokens (else 403), then deletes application_answers (cascade), applications, candidate, and the stored resume file; logs `candidate.erasure`. Verified live: export 200 → erasure bad token 403 → erasure good token 200 → export after = 404, uploads dir empty.
+- **Audit log:** `GET /api/audit?limit=` (recruiter, company-scoped, default 50 max 200). Logs `auth.login`, `candidate.*`, `job.*`, `application.create` (incl. public portal applies, attributed to the candidate email), `application.status`, and `candidate.erasure`. Live smoke verified the full trail: login → apply → stage change → (erase).
+#### Tests Added
+- `server/tests/privacy.test.js` — consent required/apply, multipart apply with real file, export (404 + full data), erasure token gate, erasure row+file deletion, audit rows + `GET /api/audit`. `portal-apply.test.js`/`public.test.js`/`screening.test.js` updated for `consent`. Total suite: 23 passing.
 
 ### Feature: Dark mode + company brand (recruiter UI)
 #### Validation
@@ -97,27 +107,25 @@ Publishability milestone in progress: AGPL-3.0 `LICENSE`, `CODE_OF_CONDUCT.md`, 
 ## Current Work
 
 ### Active Feature
-Publishability milestone (Milestone A): open-source packaging + Docker + production mode. License/CoC/contributing done; Docker + prod serving + env hardening verified end-to-end. Awaiting the remaining docs (README relaunch) and the milestone commit.
+Milestone B (candidate privacy & consent) is implemented server + client and documented. Remaining: client build (already passing) + full test suite, then the milestone commit.
 
 ### Progress
-- `LICENSE` — full AGPL-3.0 text at repo root (fetched verbatim from gnu.org).
-- `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1) + `CONTRIBUTING.md` (setup, commands, workflow, privacy expectations).
-- **Production mode:** `server/src/index.js` serves the built `client/dist` via `express.static` + a non-`/api` SPA fallback when the build exists; `server/src/auth.js` warns if `NODE_ENV=production` without `JWT_SECRET`; `server/src/seed.js` refactored into an exported, `DB_PATH`/`UPLOADS_DIR`-aware `seed()` (CLI entry retained) so it can run on boot; `SEED_ON_BOOT=1` applies the demo seed at startup (idempotent).
-- **Docker:** multi-stage `Dockerfile` (client build → server deps with alpine build toolchain for better-sqlite3 → slim runtime), `HEALTHCHECK` vs `/api/health`, `docker-compose.yml` with named volume for `/app/data`, `JWT_SECRET`/`SEED_ON_BOOT` pass-through. Verified: `docker build` succeeds; container reports `healthy`; SPA, fallback routes, login, and authed job list all work in-container.
-- Docs: `docs/FEATURES.md` ATS capability matrix drafted; PROJECT_STATE updated.
+- **Schema:** `applications` gained `consented_at` + `policy_version` (PRAGMA-checked migration, legacy backfill); new `audit_log` table + indexes.
+- **Server:** `privacy.js` (policy constants + notice), `logAudit()` in `auth.js`, JWT now carries `email`; consent gate, `GET /api/public/privacy`, DSAR export/erasure, `GET /api/audit`; `logAudit` wired into portal applies (attributed to the candidate email) and every recruiter mutation route.
+- **Client:** portal `ApplyModal` consent checkbox (fetch + display `api.publicPrivacy()`); new "Manage my data" module (`api.publicExport`/`api.publicErasure`) reachable from track views; recruiter **Activity log** view (`Audit.jsx`) + NAV entry using `api.auditLog()`.
+- **Erasure token design:** DSAR export returns one of the candidate's application `tracking_token`s as proof-of-ownership; a separate random token was tried and reverted after the exported token never matched an application.
 
-### Remaining Work
-1. README relaunch — Docker quick start, prod mode, env table, demo-mode instructions.
-2. Run client build + full test suite, then commit Milestone A ("Publishability: OSS + Docker + production mode"), folding in the `.app-row` dark-mode fix.
+### Remaining Work (Milestone B)
+1. Client build (`npm run build`) + full suite (`npm test` → 23) — already green.
+2. Commit Milestone B ("Candidate privacy: consent, export/erasure flow, and audit log").
 
 ---
 
 ## Next Actions
 
-1. **Finish Milestone A** — README relaunch (Docker quick start + env table + demo mode), client build + full test run, then commit as "Publishability: OSS + Docker + production mode" (folds in the `.app-row` dark-mode fix).
-2. **Milestone B — Candidate privacy & consent** — consent checkbox with stored `consented_at`/`policy_version` on applications; portal "Manage my data" (export JSON + token-gated erasure) + recruiter audit log; tests; docs update.
-3. (Optional) Public portal hardening when exposed publicly: cap lookup rate, add basic bot protection on `POST /api/public/applications`.
-4. (Optional) Add candidate "archived" state toggle in UI (backend filter already honors it).
+1. **Commit Milestone B** — verify `npm test` (23) + client build, commit the privacy/consent/audit work.
+2. (Optional) Public portal hardening when exposed publicly: cap lookup rate, add basic bot protection on `POST /api/public/applications`.
+3. (Optional) Add candidate "archived" state toggle in UI (backend filter already honors it).
 
 ---
 
@@ -149,7 +157,7 @@ Publishability milestone (Milestone A): open-source packaging + Docker + product
 
 ## Resume Instructions
 
-- **Verify current state:** `cd ~/git/talentflow/server && npm test` (expect 22 passing), then `cd ~/git/talentflow/client && npm run build`.
+- **Verify current state:** `cd ~/git/talentflow/server && npm test` (expect 23 passing), then `cd ~/git/talentflow/client && npm run build`.
 - **Run the app:** from repo root: `npm run dev` → open http://localhost:5173, log in `demo@acmetalent.com` / `password`; portal at http://localhost:5173/#/portal (status pages live at `#/portal/status/<token>`). Production mode: `cd server && npm run start:prod` → http://localhost:4000 (single origin).
 - **Where to start reading:** `server/src/matching.js` (scoring core, pure functions), `server/src/index.js` (all routes incl. `/api/public/*` + `/api/screening/*` + prod static serving), `server/src/screening.js` (library, per-job config, answer sanitizing), `server/src/seed.js` (`seed()` export used for `SEED_ON_BOOT`), `server/src/resume.js` (resume extraction + auto-fill heuristics), `server/src/questionnaire.js` (EEO questions), `client/src/App.jsx` (routing + theme), `client/src/theme.js` (dark-mode hook), `client/src/CandidatePortal.jsx` (portal UI + ApplyModal), `client/src/Screening.jsx` (library UI).
-- **Next concrete step:** README relaunch, then commit Milestone A (publishability) — see Next Actions.
+- **Next concrete step:** commit Milestone B (candidate privacy: consent, export/erasure flow, audit log) — see Next Actions.

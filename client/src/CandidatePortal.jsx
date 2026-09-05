@@ -15,11 +15,14 @@ function ApplyModal({ job, onApply, onExisting, onClose }) {
   const [questions, setQuestions] = useState(null);
   const [answers, setAnswers] = useState({});
   const [screening, setScreening] = useState({});
+  const [consent, setConsent] = useState(false);
+  const [privacy, setPrivacy] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
   useEffect(() => {
     api.publicQuestionnaire().then((q) => setQuestions(q)).catch(() => {});
+    api.publicPrivacy().then((p) => setPrivacy(p)).catch(() => {});
   }, []);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -97,10 +100,16 @@ function ApplyModal({ job, onApply, onExisting, onClose }) {
       setBusy(false);
       return;
     }
+    if (!consent) {
+      setErr('Please agree to the privacy notice before submitting your application.');
+      setBusy(false);
+      return;
+    }
     const fd = new FormData();
     fd.append('job_id', String(job.id));
     for (const k of ['name', 'email', 'phone', 'location', 'summary', 'years_experience']) fd.append(k, String(form[k] ?? ''));
     fd.append('skills', JSON.stringify(form.skills || []));
+    if (consent) fd.append('consent', 'true');
     if (resumeText.trim()) fd.append('resume_text', resumeText);
     if (file) fd.append('resume', file, file.name);
     const q = {};
@@ -237,9 +246,31 @@ function ApplyModal({ job, onApply, onExisting, onClose }) {
         )}
       </div>
 
+      <div className="eeo-section">
+        <div className="eeo-head">
+          <span className="chip-icon"><Icon name="shield" size={16} /></span>
+          <div>
+            <h3 style={{ margin: 0 }}>Privacy notice &amp; consent</h3>
+            <p className="muted small" style={{ margin: 0 }}>
+              Policy v{privacy?.policy_version || '2026-09-01'} · updated {privacy?.policy_version ? new Date(privacy.policy_version + 'T00:00:00Z').toLocaleDateString() : 'recently'}
+            </p>
+          </div>
+        </div>
+        <p className="muted small" style={{ fontSize: 13, lineHeight: 1.5, margin: '6px 0 10px', paddingLeft: 2 }}>
+          {privacy?.notice || 'We store the details you provide to evaluate your application and keep them only for our hiring team. You can request a copy or deletion of your data at any time from the tracking page.'}
+        </p>
+        <label className="consent-row">
+          <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
+          <span>I have read the privacy notice and consent to my data being stored and processed for this application.</span>
+        </label>
+        <div className="muted small" style={{ marginTop: 8, paddingLeft: 2 }}>
+          I can change my mind and ask to <b>export or delete my data</b> at any time using "Manage my data" on the tracking page.
+        </div>
+      </div>
+
       <div className="footer">
         <button className="btn secondary" onClick={onClose}>Cancel</button>
-        <button className="btn" onClick={submit} disabled={busy || !form.name || !form.email}>
+        <button className="btn" onClick={submit} disabled={busy || !form.name || !form.email || !consent}>
           {busy ? 'Submitting…' : 'Submit application'}
         </button>
       </div>
@@ -305,7 +336,121 @@ function StatusTracker({ status, lastUpdated }) {
   );
 }
 
-function TrackByIdentity() {
+function ManageMyData({ initialEmail, initialToken, onBackToTrack }) {
+  const [email, setEmail] = useState(initialEmail || '');
+  const [exported, setExported] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [err, setErr] = useState('');
+  const [done, setDone] = useState('');
+
+  const exportData = async () => {
+    setBusy(true); setErr(''); setDone('');
+    try {
+      setExported(await api.publicExport(email));
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const download = () => {
+    if (!exported) return;
+    const blob = new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `talentflow-data-${email.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const erase = async () => {
+    setBusy(true); setErr(''); setDone('');
+    try {
+      if (!exported?.erasure_token) throw new Error('Export your data first to receive an erasure token.');
+      const res = await api.publicErasure(email, exported.erasure_token);
+      setDone(res.message || 'Your data has been deleted.');
+      setExported(null);
+      setConfirmDelete(false);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card" style={{ maxWidth: 720 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: 10 }}>
+        <div style={{ flex: 1 }}>
+          <h2 style={{ marginBottom: 4 }}>Manage my data</h2>
+          <p className="muted small" style={{ marginBottom: 0 }}>
+            Your privacy matters. Export a copy of everything we store about you, or delete your data and applications entirely.
+          </p>
+        </div>
+        {onBackToTrack && <button className="btn small secondary" onClick={onBackToTrack}>← Back</button>}
+      </div>
+
+      <div className="field" style={{ marginTop: 4 }}>
+        <label>Email you applied with</label>
+        <div className="row">
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
+          <button className="btn secondary" disabled={busy || !email} onClick={exportData}>
+            {busy ? 'Working…' : 'Export my data'}
+          </button>
+        </div>
+        {err && <div className="banner" style={{ marginTop: 12, background: 'var(--danger-soft)', borderColor: '#f5c2c2', color: '#991b1b' }}><Icon name="shield" />{err}</div>}
+        {done && <div className="banner" style={{ marginTop: 12, background: 'var(--success-soft)', borderColor: '#bfe3c0', color: '#166534' }}><Icon name="check" />{done}</div>}
+      </div>
+
+      {exported && (
+        <div className="manage-export" style={{ marginTop: 8 }}>
+          <div className="muted small" style={{ marginBottom: 8 }}>
+            We found the following <b>{exported.applications.length}</b> application{exported.applications.length === 1 ? '' : 's'} on record for <b style={{ color: 'var(--text-2)' }}>{email}</b>:
+          </div>
+          <div className="breakdown">
+            {exported.applications.map((a, i) => (
+              <div className="breakdown-row" key={i}>
+                <span className="bl">{a.job || `Application #${i + 1}`}</span>
+                <span className="muted small">{a.status}</span>
+              </div>
+            ))}
+            <div className="breakdown-row">
+              <span className="bl">Consent</span>
+              <span className="muted small">v{exported.policy_version} · {exported.applications[0]?.consent?.consented_at ? `${timeAgo(exported.applications[0].consent.consented_at)}` : 'recorded'}</span>
+            </div>
+            <div className="breakdown-row">
+              <span className="bl">Uploaded resume</span>
+              <span className="muted small">{exported.candidate.resume_filename || 'None'}</span>
+            </div>
+          </div>
+          <div className="row" style={{ marginTop: 14, gap: 8 }}>
+            <button className="btn" onClick={download}><Icon name="download" size={14} /> Download my data (JSON)</button>
+            {!confirmDelete ? (
+              <button className="btn danger" onClick={() => setConfirmDelete(true)}><Icon name="trash" size={14} /> Delete my data</button>
+            ) : (
+              <button className="btn danger" disabled={busy} onClick={erase}><Icon name="trash" size={14} /> Confirm permanent deletion</button>
+            )}
+          </div>
+          {confirmDelete && (
+            <div className="banner" style={{ marginTop: 10, background: 'var(--danger-soft)', borderColor: '#f5c2c2', color: '#991b1b' }}>
+              <Icon name="shield" /> This permanently deletes {email}'s profile, applications, answers, and uploaded resume. This cannot be undone. Click again to confirm.
+            </div>
+          )}
+          <p className="muted small" style={{ marginTop: 10 }}>
+            The erasure token is your private application tracking link — it proves you are the owner of this data, so no one can delete by email alone.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TrackByIdentity({ onManage }) {
   const [email, setEmail] = useState('');
   const [apps, setApps] = useState(null);
   const [err, setErr] = useState('');
@@ -349,11 +494,18 @@ function TrackByIdentity() {
           </div>
         </div>
       ))}
+      <div className="card" style={{ marginTop: 18 }}>
+        <h3 style={{ margin: 0 }}>You applied, now it's your data</h3>
+        <p className="muted small" style={{ marginTop: 4, marginBottom: 12 }}>
+          Get a full copy of the data we hold, or ask us to delete it — GDPR-style rights, no forms needed.
+        </p>
+        <button className="btn secondary" onClick={() => onManage(email)}><Icon name="shield" size={15} /> Manage my data</button>
+      </div>
     </div>
   );
 }
 
-function TrackByToken({ token, setToken }) {
+function TrackByToken({ token, setToken, onManage }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState('');
   useEffect(() => {
@@ -388,6 +540,13 @@ function TrackByToken({ token, setToken }) {
             )}
           </div>
         </div>
+      </div>
+      <div className="card" style={{ marginTop: 18 }}>
+        <h3 style={{ margin: 0 }}>You applied, now it's your data</h3>
+        <p className="muted small" style={{ marginTop: 4, marginBottom: 12 }}>
+          Get a full copy of the data we hold, or ask us to delete it — no forms needed.
+        </p>
+        <button className="btn secondary" onClick={() => onManage(data.candidate?.email)}><Icon name="shield" size={15} /> Manage my data</button>
       </div>
     </div>
   );
@@ -445,6 +604,7 @@ export default function CandidatePortal({ authed, onBack }) {
     const h = window.location.hash.split('/');
     return h.length >= 4 && h[1] === 'portal' && h[2] === 'status' ? h[3] : null;
   });
+  const [manageEmail, setManageEmail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -490,7 +650,14 @@ export default function CandidatePortal({ authed, onBack }) {
           </button>
         </div>
         <div className="portal-body" style={{ maxWidth: 800, margin: '0 auto', width: '100%' }}>
-          <TrackByToken token={statusToken} />
+          {manageEmail ? (
+            <ManageMyData
+              initialEmail={manageEmail}
+              onBackToTrack={() => setManageEmail(null)}
+            />
+          ) : (
+            <TrackByToken token={statusToken} setToken={setStatusToken} onManage={setManageEmail} />
+          )}
         </div>
       </div>
     );
@@ -534,7 +701,9 @@ export default function CandidatePortal({ authed, onBack }) {
           </>
         )}
 
-        {tab === 'track' && <TrackByIdentity />}
+        {tab === 'track' && (manageEmail
+          ? <ManageMyData initialEmail={manageEmail} onBackToTrack={() => setManageEmail(null)} />
+          : <TrackByIdentity onManage={(email) => setManageEmail(email)} />)}
       </div>
 
       <div className="footer-bar">

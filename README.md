@@ -12,7 +12,7 @@ A locally hosted, Workday-style hiring tool that stores your candidate pool and 
 - **Shortlists & pipeline** — move candidates from *matched* → *in review* → *interview* → *hired*
 - **Public candidate portal** — a shareable, no-login careers page: browse open roles, one-click apply, auto-fill from an uploaded resume, complete Workday-style EEO self-identification, and track application status with a private link
 - **Screening questions** — recruiters build a reusable question library (short answer, paragraph, single/multiple choice) and configure per job which questions are asked, required, and in what order; answers show up in the recruiter Applications view only
-- **Candidate consent + privacy** — applications record explicit consent with a timestamp and policy version (see [docs/FEATURES.md](docs/FEATURES.md) for the roadmap to export/erasure self-service)
+- **Candidate consent + privacy** — applications record explicit consent with a timestamp and policy version; candidates can export a portable copy of their data (JSON + resume) and request full erasure with a proof token, all from the public portal. Recruiter actions are kept in a company-scoped audit log.
 - **Dark mode** — recruiter UI follows the OS preference with a manual sun/moon toggle; the public portal stays light
 - **Multi-company** — data is scoped per company (log in as different companies and see only your data)
 - **Locally hosted** — SQLite file database, nothing leaves your machine; no external AI API required, works fully offline
@@ -149,9 +149,14 @@ All routes (except `POST /api/auth/login`, `/api/health`, and the `/api/public/*
 - `GET /api/public/jobs/:id` — single open role
 - `GET /api/public/questionnaire` — EEO / self-identification questions (Workday-style, privacy banner included)
 - `POST /api/public/resume/parse` — upload a resume (`.pdf`, `.docx`, `.txt`, max 5 MB) and get back auto-filled contact/skills/summary fields
-- `POST /api/public/applications` — apply (multipart): candidate details + optional `resume` file + optional `screening` JSON (plus `questionnaire` JSON). Auto-creates the candidate if unknown; a duplicate application returns the existing tracking token as `409`
+- `POST /api/public/applications` — apply (multipart): candidate details + optional `resume` file + optional `screening` JSON (plus `questionnaire` JSON). Requires `consent=true` (422 otherwise); the application stores `consented_at` and the policy version. Auto-creates the candidate if unknown; a duplicate application returns the existing tracking token as `409`
 - `GET /api/public/applications/:token` — application status by private tracking link
 - `POST /api/public/applications/lookup` — list applications for an email address
+- `GET /api/public/privacy` — privacy notice and current policy version
+- `POST /api/public/export` — data subject access request: all data stored for an email (candidate, applications, answers, consent records, resume filename) plus an `erasure_token` proof
+- `POST /api/public/erasure` — right-to-be-forgotten: `{ email, erasure_token }` deletes the candidate, their applications/answers, and any stored resume file (403 on a wrong token)
+
+Recruiter routes (auth required): `GET /api/audit?limit=` returns the company-scoped activity log (sign-ins, candidate/job changes, stage changes, self-service erasures).
 
 Internal match scores are never exposed to candidates — the portal shows stage status only. Screening answers are returned to recruiters (`GET /api/applications`) with labelled questions; EEO answers are stored server-side (compliance) but never returned by recruiter or portal routes.
 

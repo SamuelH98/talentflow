@@ -6,12 +6,13 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
-import { getDb, uploadsDir } from './db.js';
-import { requireAuth, signToken } from './auth.js';
+import { getDb, uploadsDir, resolveUploadsDir } from './db.js';
+import { requireAuth, signToken, logAudit } from './auth.js';
 import { scoreCandidate, rankCandidates, parseSkills } from './matching.js';
 import { readResume, UnsupportedResumeError } from './resume.js';
 import { QUESTIONNAIRE, questionnairePublic } from './questionnaire.js';
 import { seed } from './seed.js';
+import { POLICY_VERSION, PRIVACY_NOTICE } from './privacy.js';
 import {
   effectiveQuestions,
   getLibrary,
@@ -64,6 +65,7 @@ app.post('/api/auth/login', (req, res) => {
     return res.status(401).json({ error: 'Invalid email or password' });
   }
   const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(user.company_id);
+  logAudit({ user, db, action: 'auth.login', detail: 'Recruiter signed in' });
   res.json({ token: signToken(user), user: { id: user.id, name: user.name, email: user.email, role: user.role, company } });
 });
 
@@ -127,6 +129,7 @@ app.post('/api/candidates', requireAuth, (req, res) => {
       resume_text || null
     );
   res.status(201).json(candidateRow(db.prepare('SELECT * FROM candidates WHERE id = ?').get(info.lastInsertRowid)));
+  logAudit({ user: req.user, db, action: 'candidate.create', detail: `${name} <${email || ''}>` });
 });
 
 app.put('/api/candidates/:id', requireAuth, (req, res) => {
@@ -148,23 +151,27 @@ app.put('/api/candidates/:id', requireAuth, (req, res) => {
     b.resume_text, b.status, req.params.id
   );
   res.json(candidateRow(db.prepare('SELECT * FROM candidates WHERE id = ?').get(req.params.id)));
+  logAudit({ user: req.user, db, action: 'candidate.update', detail: `${existing.name} (#${existing.id})` });
 });
 
 app.delete('/api/candidates/:id', requireAuth, (req, res) => {
   const db = getDb();
+  const existing = db.prepare('SELECT name FROM candidates WHERE id = ? AND company_id = ?').get(req.params.id, req.user.company_id);
   const info = db.prepare('DELETE FROM candidates WHERE id = ? AND company_id = ?').run(req.params.id, req.user.company_id);
   if (!info.changes) return res.status(404).json({ error: 'Candidate not found' });
+  logAudit({ user: req.user, db, action: 'candidate.delete', detail: `${existing?.name || req.params.id} (#${req.params.id})` });
   res.json({ ok: true });
 });
 
 app.get('/api/candidates/:id/resume', requireAuth, (req, res) => {
   const db = getDb();
   const row = db
-    .prepare('SELECT id, resume_path, resume_filename FROM candidates WHERE id = ? AND company_id = ?')
+    .prepare('SELECT id, resume_path, resume_filename, name FROM candidates WHERE id = ? AND company_id = ?')
     .get(req.params.id, req.user.company_id);
   if (!row || !row.resume_path) return res.status(404).json({ error: 'No resume on file for this candidate' });
-  const file = path.join(uploadsDir, path.basename(row.resume_path));
+  const file = path.join(resolveUploadsDir(), path.basename(row.resume_path));
   if (!fs.existsSync(file)) return res.status(404).json({ error: 'Resume file is missing' });
+  logAudit({ user: req.user, db, action: 'candidate.resume_download', detail: `${row.name} (#${row.id})` });
   res.download(file, row.resume_filename || path.basename(file));
 });
 
@@ -203,6 +210,7 @@ app.post('/api/jobs', requireAuth, (req, res) => {
       Number(years_required) || 0, min_salary || null, max_salary || null
     );
   res.status(201).json(jobRow(db.prepare('SELECT * FROM jobs WHERE id = ?').get(info.lastInsertRowid)));
+  logAudit({ user: req.user, db, action: 'job.create', detail: `${title} (#${info.lastInsertRowid})` });
 });
 
 app.put('/api/jobs/:id', requireAuth, (req, res) => {
@@ -218,12 +226,15 @@ app.put('/api/jobs/:id', requireAuth, (req, res) => {
     Number(b.years_required) || 0, b.min_salary || null, b.max_salary || null, b.status, req.params.id
   );
   res.json(jobRow(db.prepare('SELECT * FROM jobs WHERE id = ?').get(req.params.id)));
+  logAudit({ user: req.user, db, action: 'job.update', detail: `${existing.title} (#${existing.id})` });
 });
 
 app.delete('/api/jobs/:id', requireAuth, (req, res) => {
   const db = getDb();
+  const existing = db.prepare('SELECT title FROM jobs WHERE id = ? AND company_id = ?').get(req.params.id, req.user.company_id);
   const info = db.prepare('DELETE FROM jobs WHERE id = ? AND company_id = ?').run(req.params.id, req.user.company_id);
   if (!info.changes) return res.status(404).json({ error: 'Job not found' });
+  logAudit({ user: req.user, db, action: 'job.delete', detail: `${existing?.title || req.params.id} (#${req.params.id})` });
   res.json({ ok: true });
 });
 
@@ -383,6 +394,7 @@ app.post('/api/applications', requireAuth, (req, res) => {
       .prepare('INSERT INTO applications (job_id, candidate_id, score, notes, tracking_token, status_updated_at) VALUES (?, ?, ?, ?, ?, datetime(\'now\'))')
       .run(job_id, candidate_id, score ?? null, notes || null, crypto.randomUUID());
     res.status(201).json({ id: info.lastInsertRowid, job_id, candidate_id, score, notes });
+    logAudit({ user: req.user, db, action: 'application.create', detail: `${cand.name} → ${job.title} (#${info.lastInsertRowid})` });
   } catch {
     return res.status(400).json({ error: 'Candidate already applied to this job' });
   }
@@ -401,7 +413,30 @@ app.patch('/api/applications/:id/status', requireAuth, (req, res) => {
   if (!row) return res.status(404).json({ error: 'Application not found' });
   db.prepare("UPDATE applications SET status = ?, notes = ?, status_updated_at = datetime('now') WHERE id = ?")
     .run(status || row.status, notes ?? row.notes, req.params.id);
+  logAudit({
+    user: req.user,
+    db,
+    action: 'application.status',
+    detail: `#${row.id} (${row.candidate_name || 'candidate'} → ${status || row.status})`,
+  });
   res.json(db.prepare('SELECT * FROM applications WHERE id = ?').get(req.params.id));
+});
+
+// ---------- Audit log ----------
+
+app.get('/api/audit', requireAuth, (req, res) => {
+  const db = getDb();
+  const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+  const rows = db
+    .prepare(
+      `SELECT id, user_email, action, detail, created_at
+       FROM audit_log
+       WHERE company_id = ?
+       ORDER BY id DESC
+       LIMIT ?`
+    )
+    .all(req.user.company_id, limit);
+  res.json(rows);
 });
 
 // ---------- Public candidate portal ----------
@@ -431,6 +466,10 @@ app.get('/api/public/jobs/:id', (req, res) => {
 
 app.get('/api/public/questionnaire', (req, res) => {
   res.json(questionnairePublic());
+});
+
+app.get('/api/public/privacy', (req, res) => {
+  res.json({ notice: PRIVACY_NOTICE, policy_version: POLICY_VERSION });
 });
 
 app.post('/api/public/resume/parse', upload.single('resume'), async (req, res) => {
@@ -469,7 +508,7 @@ function sanitizedAnswers(answers) {
 function storeResumeFile(file) {
   const ext = String((file.originalname || '').split('.').pop() || '').toLowerCase();
   const stored = `${crypto.randomUUID()}.${ext}`;
-  fs.writeFileSync(path.join(uploadsDir, stored), file.buffer);
+  fs.writeFileSync(path.join(resolveUploadsDir(), stored), file.buffer);
   return {
     resume_filename: path.basename(file.originalname || stored),
     resume_path: stored,
@@ -483,6 +522,9 @@ app.post('/api/public/applications', upload.single('resume'), async (req, res) =
   const skills = Array.isArray(body.skills) ? body.skills : (safeJson(body.skills) || []);
   const questionnaire = sanitizedAnswers(safeJson(body.questionnaire) || body.questionnaire);
   if (!job_id || !name || !email) return res.status(400).json({ error: 'name, email and job_id are required' });
+  if (body.consent !== 'true' && body.consent !== true) {
+    return res.status(422).json({ error: 'You must agree to the privacy notice before your application can be submitted.' });
+  }
   const company = getDefaultCompany(db);
   if (!company) return res.status(404).json({ error: 'No company configured' });
   const job = db.prepare('SELECT * FROM jobs WHERE id = ? AND company_id = ? AND status = ?').get(job_id, company.id, 'open');
@@ -547,8 +589,10 @@ app.post('/api/public/applications', upload.single('resume'), async (req, res) =
 
   const token = crypto.randomUUID();
   const info = db
-    .prepare("INSERT INTO applications (job_id, candidate_id, tracking_token, status_updated_at) VALUES (?, ?, ?, datetime('now'))")
-    .run(job_id, candidateId, token);
+    .prepare(
+      "INSERT INTO applications (job_id, candidate_id, tracking_token, consented_at, policy_version, status_updated_at) VALUES (?, ?, ?, datetime('now'), ?, datetime('now'))"
+    )
+    .run(job_id, candidateId, token, POLICY_VERSION);
 
   const eeoKeys = Object.keys(questionnaire);
   const screeningKeys = Object.keys(screening.answers);
@@ -564,6 +608,14 @@ app.post('/api/public/applications', upload.single('resume'), async (req, res) =
     job: { id: job.id, title: job.title, department: job.department, location: job.location },
     applied_at: new Date().toISOString(),
     resume_attached: resume.attached,
+    consent: { required: true, policy_version: POLICY_VERSION, consented_at: new Date().toISOString() },
+  });
+
+  logAudit({
+    user: req.user || { company_id: company.id, id: null, email },
+    db,
+    action: 'application.create',
+    detail: `${existing ? existing.name : name} <${email}> → ${job.title}`,
   });
 });
 
@@ -579,6 +631,10 @@ function publicApplicationRow(db, app) {
     last_updated: app.status_updated_at || app.created_at,
     job: job ? scrubJob(jobRow(job)) : null,
     candidate: cand ? { name: cand.name, email: cand.email } : null,
+    consent: cand ? {
+      policy_version: app.policy_version || null,
+      consented_at: app.consented_at || null,
+    } : null,
   };
 }
 
@@ -601,6 +657,92 @@ app.post('/api/public/applications/lookup', (req, res) => {
     .prepare('SELECT * FROM applications WHERE candidate_id = ? ORDER BY created_at DESC')
     .all(cand.id);
   res.json(apps.map((a) => publicApplicationRow(db, a)));
+});
+
+// ---------- Manage my data (portal privacy flow) ----------
+
+app.post('/api/public/export', (req, res) => {
+  const db = getDb();
+  const { email } = req.body || {};
+  if (!email) return res.status(400).json({ error: 'email is required' });
+  const company = getDefaultCompany(db);
+  const cand = company
+    ? db.prepare('SELECT * FROM candidates WHERE company_id = ? AND email = ?').get(company.id, email)
+    : undefined;
+  if (!cand) return res.status(404).json({ error: 'No candidate data found for that email' });
+
+  const apps = db.prepare('SELECT * FROM applications WHERE candidate_id = ? ORDER BY created_at DESC').all(cand.id);
+  const appsOut = apps.map((a) => {
+    const answers = db.prepare('SELECT data FROM application_answers WHERE application_id = ?').get(a.id);
+    const job = db.prepare('SELECT title, department, location FROM jobs WHERE id = ?').get(a.job_id);
+    return {
+      job_id: a.job_id,
+      job: job ? `${job.title}${job.department ? ` (${job.department})` : ''}` : null,
+      status: a.status,
+      applied_at: a.created_at,
+      last_updated: a.status_updated_at || a.created_at,
+      notes: a.notes || null,
+      answers: answers ? safeJson(answers.data) : null,
+      consent: { policy_version: a.policy_version, consented_at: a.consented_at },
+      resume_attached: !!cand.resume_path,
+    };
+  });
+
+  const erasure_token = apps[0]?.tracking_token || null;
+  const data = {
+    exported_at: new Date().toISOString(),
+    policy_version: POLICY_VERSION,
+    candidate: {
+      name: cand.name,
+      email: cand.email,
+      phone: cand.phone || null,
+      location: cand.location || null,
+      title: cand.title || null,
+      summary: cand.summary || null,
+      years_experience: cand.years_experience,
+      skills: cand.skills ? parseSkills(cand.skills) : [],
+      resume_filename: cand.resume_filename || null,
+    },
+    applications: appsOut,
+    erasure_token,
+    erasure_note: 'To delete your data, call the erasure endpoint with your email plus this token (one of your application tracking links).',
+  };
+  res.json(data);
+});
+
+app.post('/api/public/erasure', (req, res) => {
+  const db = getDb();
+  const { email, erasure_token } = req.body || {};
+  if (!email || !erasure_token) {
+    return res.status(400).json({ error: 'email and erasure_token are required' });
+  }
+  const company = getDefaultCompany(db);
+  if (!company) return res.status(404).json({ error: 'No company configured' });
+  const cand = db.prepare('SELECT * FROM candidates WHERE company_id = ? AND email = ?').get(company.id, email);
+  if (!cand) return res.status(404).json({ error: 'No candidate data found for that email' });
+
+  const tokenRow = db
+    .prepare('SELECT * FROM applications WHERE candidate_id = ? AND tracking_token = ?')
+    .get(cand.id, erasure_token);
+  if (!tokenRow) {
+    return res.status(403).json({ error: 'Invalid erasure token. Export your data first to receive one.' });
+  }
+
+  if (cand.resume_path) {
+    const file = path.join(resolveUploadsDir(), path.basename(cand.resume_path));
+    if (fs.existsSync(file)) {
+      try { fs.unlinkSync(file); } catch { /* best-effort file cleanup */ }
+    }
+  }
+  const affected = db.prepare('SELECT COUNT(*) AS n FROM applications WHERE candidate_id = ?').get(cand.id).n;
+  db.prepare('DELETE FROM applications WHERE candidate_id = ?').run(cand.id);
+  db.prepare('DELETE FROM candidates WHERE id = ?').run(cand.id);
+  logAudit({ user: { company_id: cand.company_id }, db, action: 'candidate.erasure', detail: `${email} (${cand.name})` });
+  res.json({
+    ok: true,
+    message: 'Your data and applications have been deleted, along with any uploaded resume.',
+    affected_applications: affected,
+  });
 });
 
 export { app };

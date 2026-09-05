@@ -72,6 +72,10 @@ export const api = {
   publicJobs: () => request('/public/jobs'),
   publicJob: (id) => request(`/public/jobs/${id}`),
   publicQuestionnaire: () => request('/public/questionnaire'),
+  publicPrivacy: () => request('/public/privacy'),
+  publicExport: (email) => request('/public/export', { method: 'POST', body: JSON.stringify({ email }) }),
+  publicErasure: (email, erasure_token) => request('/public/erasure', { method: 'POST', body: JSON.stringify({ email, erasure_token }) }),
+  auditLog: (limit = 50) => request(`/audit?limit=${limit}`),
   resumeParse: (file) => {
     const fd = new FormData();
     fd.append('resume', file);

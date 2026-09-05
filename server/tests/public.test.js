@@ -34,7 +34,7 @@ test('public candidate portal: browse jobs, apply, track status', async () => {
     const apply = await (await fetch(`${base}/api/public/applications`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ job_id: jobId, name: 'Portal Applicant', email: 'portal@x.com', skills: ['React'] }),
+      body: JSON.stringify({ job_id: jobId, name: 'Portal Applicant', email: 'portal@x.com', skills: ['React'], consent: true }),
     })).json();
     assert.ok(apply.tracking_token);
     assert.equal(apply.status, 'matched');
@@ -43,11 +43,19 @@ test('public candidate portal: browse jobs, apply, track status', async () => {
     const cand = db.prepare('SELECT * FROM candidates WHERE email = ?').get('portal@x.com');
     assert.ok(cand, 'candidate should be auto-created from public apply');
 
+    // consent is mandatory
+    const noConsent = await fetch(`${base}/api/public/applications`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_id: jobId, name: 'No Consent', email: 'noconsent@x.com', skills: ['React'] }),
+    });
+    assert.equal(noConsent.status, 422);
+
     // duplicate apply returns existing token, no new rows
     const dup = await (await fetch(`${base}/api/public/applications`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ job_id: jobId, name: 'Portal Applicant', email: 'portal@x.com' }),
+      body: JSON.stringify({ job_id: jobId, name: 'Portal Applicant', email: 'portal@x.com', consent: true }),
     })).json();
     assert.equal(dup.existing_application, true);
     assert.equal(dup.tracking_token, apply.tracking_token);

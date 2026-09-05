@@ -10,6 +10,7 @@ import Jobs from './Jobs.jsx';
 import Matches from './Matches.jsx';
 import Applications from './Applications.jsx';
 import Screening from './Screening.jsx';
+import Audit from './Audit.jsx';
 import CandidatePortal from './CandidatePortal.jsx';
 
 function parseHash() {
@@ -23,6 +24,7 @@ const NAV = [
   { key: 'matches', label: 'Best Candidates', icon: 'trophy' },
   { key: 'applications', label: 'Applications', icon: 'list' },
   { key: 'screening', label: 'Screening', icon: 'filter' },
+  { key: 'audit', label: 'Activity log', icon: 'clock' },
 ];
 
 export default function App() {
@@ -105,6 +107,7 @@ export default function App() {
           {activeView === 'matches' && <Matches />}
           {activeView === 'applications' && <Applications />}
           {activeView === 'screening' && <Screening />}
+          {activeView === 'audit' && <Audit companyName={user.company?.name} />}
         </main>
       </div>
     </div>
