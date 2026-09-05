@@ -5,7 +5,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const db = createDb(path.join(__dirname, '..', 'data', 'talentflow.db'));
+
+export function seed(db = createDb(process.env.DB_PATH || path.join(__dirname, '..', 'data', 'talentflow.db'))) {
 
 const company = db.prepare('SELECT * FROM companies WHERE name = ?').get('Acme Talent Co');
 let companyId;
@@ -250,5 +251,9 @@ if (appCount === 0) {
   }
 }
 
-console.log('Seed complete.');
-console.log('Login: demo@acmetalent.com / password');
+if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
+  seed();
+  console.log('Seed complete.');
+  console.log('Login: demo@acmetalent.com / password');
+}
+}

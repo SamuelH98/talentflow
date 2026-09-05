@@ -8,6 +8,8 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "seed": "node src/seed.js",
+    "build": "cd ../client && npm run build",
+    "start:prod": "npm run build && NODE_ENV=production node src/index.js",
     "test": "node --test"
   },
   "dependencies": {

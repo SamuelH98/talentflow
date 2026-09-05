@@ -4,12 +4,14 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import multer from 'multer';
 import { getDb, uploadsDir } from './db.js';
 import { requireAuth, signToken } from './auth.js';
 import { scoreCandidate, rankCandidates, parseSkills } from './matching.js';
 import { readResume, UnsupportedResumeError } from './resume.js';
 import { QUESTIONNAIRE, questionnairePublic } from './questionnaire.js';
+import { seed } from './seed.js';
 import {
   effectiveQuestions,
   getLibrary,
@@ -26,6 +28,8 @@ app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 4000;
+
+const CLIENT_DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'client', 'dist');
 
 const RESUME_EXT = ['pdf', 'docx', 'txt'];
 const upload = multer({
@@ -613,5 +617,21 @@ app.use((err, req, res, next) => {
 });
 
 if (process.env.NODE_ENV !== 'test') {
+  if (process.env.SEED_ON_BOOT === '1' || process.env.SEED_ON_BOOT === 'true') {
+    seed();
+    console.log('[TalentFlow] Demo seed applied.');
+  }
+
+  if (process.env.SERVE_CLIENT !== 'off') {
+    const indexFile = path.join(CLIENT_DIST, 'index.html');
+    if (fs.existsSync(indexFile)) {
+      app.use(express.static(CLIENT_DIST));
+      app.get(/^(?!\/api(\/|$)).*/, (req, res) => res.sendFile(indexFile));
+      console.log(`[TalentFlow] Serving client from ${CLIENT_DIST}`);
+    } else {
+      console.warn(`[TalentFlow] client/dist not found at ${CLIENT_DIST} — API only. Run "cd client && npm run build".`);
+    }
+  }
+
   app.listen(PORT, () => console.log(`TalentFlow API listening on http://localhost:${PORT}`));
 }

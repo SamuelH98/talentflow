@@ -9,7 +9,9 @@ TalentFlow — local hiring & candidate-ranking app
 A locally hosted "Workday-lite" where companies add jobs and candidates, and the app automatically scores/ranks the best candidates per job with transparent match breakdowns.
 
 ### Current Status
-Recruiter UI + public candidate portal shipped. EEO questions + local resume parsing, recruiter-managed screening questions (library + per-job config), and recruiter-only dark mode (OS default + toggle + company brand in topbar) all implemented with **22 passing server tests**; client builds cleanly. Screening work is committed (`0ac206e` server, client pending); everything else is committed.
+Recruiter UI + public candidate portal shipped. EEO questions + local resume parsing, recruiter-managed screening questions (library + per-job config), and recruiter-only dark mode (OS default + toggle + company brand in topbar) all implemented with **22 passing server tests**; client builds cleanly. Screening + dark mode client work committed (`1e6e022`).
+
+Publishability milestone in progress: AGPL-3.0 `LICENSE`, `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`, production static serving (Express serves `client/dist` with SPA fallback), multi-stage `Dockerfile` + `docker-compose.yml` (healthchecked, image build + `docker run` verified: SPA, `/api/health`, login, authed `/api/jobs` all pass in-container, health = `healthy`), env hardening (`JWT_SECRET` production guard, `SEED_ON_BOOT` demo seed, `DB_PATH`/`UPLOADS_DIR` honored by seed), `docs/FEATURES.md` ATS matrix. Uncommitted: dark-mode row fix + all of the above.
 
 ---
 
@@ -95,25 +97,27 @@ Recruiter UI + public candidate portal shipped. EEO questions + local resume par
 ## Current Work
 
 ### Active Feature
-Screening questions + dark mode client milestone — implemented, awaiting commit (server already committed `0ac206e`).
+Publishability milestone (Milestone A): open-source packaging + Docker + production mode. License/CoC/contributing done; Docker + prod serving + env hardening verified end-to-end. Awaiting the remaining docs (README relaunch) and the milestone commit.
 
 ### Progress
-- Client: api.js screening functions; `theme.js` (`useTheme` hook, localStorage `talentflow_theme`); `Screening.jsx` library view + QuestionForm modal; `Jobs.jsx` JobQuestions per-job modal; `CandidatePortal.jsx` "Before you apply" screening section with required validation; `Applications.jsx` rewritten with expandable rows + labelled screening answers; `App.jsx` NAV + theme wiring + company-branded topbar; `ui.jsx` `ThemeToggle`; `Login.jsx` toggle in sign-in side; `Icons.jsx` `sun`/`moon`/`chevronUp`/`trash`; `styles.css` `[data-theme]` token blocks (dark + portal-light scoping), tokenized recruiter hardcoded colors, and CSS for `screen-*`, `jsq-*`, `app-*`, `qa`, `option-row`, `check-row`, `switch`, `theme-toggle`, `brand-*`.
-- Docs: README updated (features, portal blurb, layout, routes). PROJECT_STATE updated.
-- Live smoke test (server running on :4000): login → screening library (3 seeded questions) → per-job inherited config → applications return labelled screening answers. Demo data reseeded idempotently.
+- `LICENSE` — full AGPL-3.0 text at repo root (fetched verbatim from gnu.org).
+- `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1) + `CONTRIBUTING.md` (setup, commands, workflow, privacy expectations).
+- **Production mode:** `server/src/index.js` serves the built `client/dist` via `express.static` + a non-`/api` SPA fallback when the build exists; `server/src/auth.js` warns if `NODE_ENV=production` without `JWT_SECRET`; `server/src/seed.js` refactored into an exported, `DB_PATH`/`UPLOADS_DIR`-aware `seed()` (CLI entry retained) so it can run on boot; `SEED_ON_BOOT=1` applies the demo seed at startup (idempotent).
+- **Docker:** multi-stage `Dockerfile` (client build → server deps with alpine build toolchain for better-sqlite3 → slim runtime), `HEALTHCHECK` vs `/api/health`, `docker-compose.yml` with named volume for `/app/data`, `JWT_SECRET`/`SEED_ON_BOOT` pass-through. Verified: `docker build` succeeds; container reports `healthy`; SPA, fallback routes, login, and authed job list all work in-container.
+- Docs: `docs/FEATURES.md` ATS capability matrix drafted; PROJECT_STATE updated.
 
 ### Remaining Work
-1. Commit client milestone ("Screening questions UI + dark mode + company brand").
-2. (Optional) "View resume" button on the recruiter Candidates view via `GET /api/candidates/:id/resume`.
+1. README relaunch — Docker quick start, prod mode, env table, demo-mode instructions.
+2. Run client build + full test suite, then commit Milestone A ("Publishability: OSS + Docker + production mode"), folding in the `.app-row` dark-mode fix.
 
 ---
 
 ## Next Actions
 
-1. **Commit client milestone** — Screening.jsx, theme.js, Jobs/Applications/CandidatePortal/App/Login/ui/`api.js`/`Icons.jsx`/`styles.css`, and the README/PROJECT_STATE updates, as "Screening questions UI + dark mode + company brand".
-2. (Optional) Add candidate "archived" state toggle in UI (backend filter already honors it).
-3. (Optional) Production hardening: set real `JWT_SECRET`, add rate limiting, run behind HTTPS.
-4. (Optional) Public portal hardening when exposed publicly: cap lookup rate, add basic bot protection on `POST /api/public/applications`.
+1. **Finish Milestone A** — README relaunch (Docker quick start + env table + demo mode), client build + full test run, then commit as "Publishability: OSS + Docker + production mode" (folds in the `.app-row` dark-mode fix).
+2. **Milestone B — Candidate privacy & consent** — consent checkbox with stored `consented_at`/`policy_version` on applications; portal "Manage my data" (export JSON + token-gated erasure) + recruiter audit log; tests; docs update.
+3. (Optional) Public portal hardening when exposed publicly: cap lookup rate, add basic bot protection on `POST /api/public/applications`.
+4. (Optional) Add candidate "archived" state toggle in UI (backend filter already honors it).
 
 ---
 
@@ -146,6 +150,6 @@ Screening questions + dark mode client milestone — implemented, awaiting commi
 ## Resume Instructions
 
 - **Verify current state:** `cd ~/git/talentflow/server && npm test` (expect 22 passing), then `cd ~/git/talentflow/client && npm run build`.
-- **Run the app:** from repo root: `npm run dev` → open http://localhost:5173, log in `demo@acmetalent.com` / `password`; portal at http://localhost:5173/#/portal (status pages live at `#/portal/status/<token>`).
-- **Where to start reading:** `server/src/matching.js` (scoring core, pure functions), `server/src/index.js` (all routes incl. `/api/public/*` + `/api/screening/*`), `server/src/screening.js` (library, per-job config, answer sanitizing), `server/src/resume.js` (resume extraction + auto-fill heuristics), `server/src/questionnaire.js` (EEO questions), `client/src/App.jsx` (routing + theme), `client/src/theme.js` (dark-mode hook), `client/src/CandidatePortal.jsx` (portal UI + ApplyModal), `client/src/Screening.jsx` (library UI).
-- **Next concrete step:** commit the screening + dark mode client milestone (see Next Actions).
+- **Run the app:** from repo root: `npm run dev` → open http://localhost:5173, log in `demo@acmetalent.com` / `password`; portal at http://localhost:5173/#/portal (status pages live at `#/portal/status/<token>`). Production mode: `cd server && npm run start:prod` → http://localhost:4000 (single origin).
+- **Where to start reading:** `server/src/matching.js` (scoring core, pure functions), `server/src/index.js` (all routes incl. `/api/public/*` + `/api/screening/*` + prod static serving), `server/src/screening.js` (library, per-job config, answer sanitizing), `server/src/seed.js` (`seed()` export used for `SEED_ON_BOOT`), `server/src/resume.js` (resume extraction + auto-fill heuristics), `server/src/questionnaire.js` (EEO questions), `client/src/App.jsx` (routing + theme), `client/src/theme.js` (dark-mode hook), `client/src/CandidatePortal.jsx` (portal UI + ApplyModal), `client/src/Screening.jsx` (library UI).
+- **Next concrete step:** README relaunch, then commit Milestone A (publishability) — see Next Actions.

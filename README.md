@@ -1,6 +1,8 @@
 # TalentFlow
 
-A locally hosted, Workday-style hiring tool that stores your candidate pool and jobs, then **scores and ranks the best candidates** for each role automatically.
+A locally hosted, Workday-style hiring tool that stores your candidate pool and jobs, then **scores and ranks the best candidates** for each role automatically — with no database server, no cloud account, and no external AI API. Runs in under a minute.
+
+[License: AGPL-3.0](LICENSE) · [Contributing](CONTRIBUTING.md) · [Code of Conduct](CODE_OF_CONDUCT.md) · [Feature matrix](docs/FEATURES.md)
 
 ## Features
 
@@ -10,6 +12,7 @@ A locally hosted, Workday-style hiring tool that stores your candidate pool and 
 - **Shortlists & pipeline** — move candidates from *matched* → *in review* → *interview* → *hired*
 - **Public candidate portal** — a shareable, no-login careers page: browse open roles, one-click apply, auto-fill from an uploaded resume, complete Workday-style EEO self-identification, and track application status with a private link
 - **Screening questions** — recruiters build a reusable question library (short answer, paragraph, single/multiple choice) and configure per job which questions are asked, required, and in what order; answers show up in the recruiter Applications view only
+- **Candidate consent + privacy** — applications record explicit consent with a timestamp and policy version (see [docs/FEATURES.md](docs/FEATURES.md) for the roadmap to export/erasure self-service)
 - **Dark mode** — recruiter UI follows the OS preference with a manual sun/moon toggle; the public portal stays light
 - **Multi-company** — data is scoped per company (log in as different companies and see only your data)
 - **Locally hosted** — SQLite file database, nothing leaves your machine; no external AI API required, works fully offline
@@ -44,6 +47,53 @@ Open http://localhost:5173 and sign in with:
 
 **Candidate portal** (no login needed): http://localhost:5173/#/portal — browse open jobs, apply in under a minute, and track applications. After applying you get a private tracking link (`#/portal/status/<token>`) you can keep or share. In the apply form you can upload a `.pdf`, `.docx`, or `.txt` resume and the portal auto-fills your details locally (best-effort — review before submitting; scanned/image PDFs can't be read). Each job may also ask screening questions configured by the recruiter (answers are reviewed by the hiring team and are **not** shown to other candidates). EEO / self-identification questions follow the standard Workday/OFCCP format; answers are stored for compliance reporting but are deliberately **not visible** in any recruiter pipeline view.
 
+## Quick start — Docker
+
+```bash
+docker compose up --build
+```
+
+Brings up the whole app on http://localhost:4000. On first run set `SEED_ON_BOOT=1` in your environment (or `.env`) to load demo data and a login, or create an account via the API.
+
+```bash
+# optional demo data on first boot
+SEED_ON_BOOT=1 JWT_SECRET=$(openssl rand -hex 32) docker compose up --build
+```
+
+Data and uploaded resumes live in the named `talentflow-data` volume (SQLite file — delete the volume to reset).
+
+## Quick start — from source
+
+Requires **Node.js ≥ 20** (tested on 24).
+
+```bash
+npm install             # root (concurrently)
+npm run setup           # installs server + client deps
+npm run db:seed         # creates the SQLite DB with sample data
+npm run dev             # starts API (:4000) + web app (:5173)
+```
+
+Open http://localhost:5173 and sign in with:
+
+- **Email:** `demo@acmetalent.com`
+- **Password:** `password`
+
+## Production mode (single origin)
+
+`cd server && npm run start:prod` builds the client and serves **everything** — API and the React app, SPA routing included — from one Express server on :4000. No separate web server or CORS needed.
+
+Useful environment variables (all optional):
+
+| Variable | Default | Purpose |
+| -------- | ------- | ------- |
+| `PORT` | `4000` | HTTP port |
+| `DB_PATH` | `server/data/talentflow.db` | SQLite database file location |
+| `UPLOADS_DIR` | `server/data/uploads` | Where uploaded resumes are stored |
+| `JWT_SECRET` | dev-only fallback | Signing key for login tokens — **set a strong random value in production** (the server warns in `NODE_ENV=production` if unset) |
+| `NODE_ENV` | development | `production` enables prod behaviors (`JWT_SECRET` guard, static serving) |
+| `SEED_ON_BOOT` | off | `1`/`true` seeds demo data idempotently at startup — handy for a hosted demo that should reset cleanly |
+| `SERVE_CLIENT` | `on` | Set to `off` to run API only |
+
 ## Scripts (from repo root)
 
 | Command | What it does |
@@ -51,23 +101,28 @@ Open http://localhost:5173 and sign in with:
 | `npm run server` | API only (http://localhost:4000) |
 | `npm run client` | Vite web app only (http://localhost:5173) |
 | `npm run dev` | Both together |
+| `npm run build` | Build the client into `client/dist` |
 | `npm run db:seed` | Re-seed sample data (safe: skips existing rows) |
 | `npm test` | Server unit + API tests |
+| `cd server && npm run start:prod` | Build client + serve app and API from one port |
 
 ## Project layout
 
 ```
 talentflow/
+├── Dockerfile          # multi-stage build (client → server deps → slim runtime)
+├── docker-compose.yml  # one-command startup with a data volume
+├── docs/FEATURES.md    # ATS capability matrix + comparison with open peers
 ├── server/
 │   ├── src/
-│   │   ├── index.js      # Express app + all REST routes
+│   │   ├── index.js      # Express app + all REST routes + prod static serving
 │   │   ├── db.js         # SQLite schema + connection
 │   │   ├── matching.js   # pure scoring / ranking logic
-│   │   ├── auth.js       # JWT signing + middleware
+│   │   ├── auth.js       # JWT signing + middleware (+ production secret guard)
 │   │   ├── questionnaire.js # EEO / self-identification question config
 │   │   ├── screening.js   # screening-question library + per-job config + answer sanitizing
 │   │   ├── resume.js     # resume text extraction (.txt/.docx/.pdf) + field auto-fill heuristics
-│   │   └── seed.js       # sample companies/users/candidates/jobs
+│   │   └── seed.js       # sample companies/users/candidates/jobs (reusable for SEED_ON_BOOT)
 │   ├── tests/            # node:test units + API integration
 │   └── data/talentflow.db
 ├── client/
@@ -102,5 +157,6 @@ Internal match scores are never exposed to candidates — the portal shows stage
 
 ## Notes
 
-- Database lives at `server/data/talentflow.db` (gitignored). Delete it and re-run `npm run db:seed` to reset.
-- The dev JWT secret is `local-dev-secret-change-me` — set `JWT_SECRET` before exposing anything publicly.
+- The database file is `server/data/talentflow.db` by default (gitignored); use `DB_PATH` to relocate. Delete it and re-run `npm run db:seed` to reset.
+- The dev JWT secret is `local-dev-secret-change-me` — set `JWT_SECRET` before exposing anything publicly (the server logs a warning in production if you forget).
+- WAL mode is on; three `-wal`/`-shm` files accompany the DB file — normal.
