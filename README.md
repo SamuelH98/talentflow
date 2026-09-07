@@ -139,13 +139,20 @@ All routes (except `POST /api/auth/login`, `/api/health`, and the `/api/public/*
 - `GET|POST /api/jobs`, `PUT|DELETE /api/jobs/:id`
 - `GET /api/jobs/:id/matches` — ranked candidates for one job (with score breakdowns)
 - `GET /api/matches/all` — best candidates per job
+- `GET /api/search?q=` — global search across candidates, jobs, and applications for the company (name/email/title/location/skills; job title/location/description; application by candidate or job name)
 - `GET|POST /api/screening/questions`, `PUT|DELETE /api/screening/questions/:id` — company screening-question library
 - `GET|PUT /api/jobs/:id/screening` — per-job screening config (inherit company defaults or override)
 - `GET|POST /api/applications`, `PATCH /api/applications/:id/status`
+- `PUT /api/company/brand` — set the company brand color (`{ brand_color: "#rrggbb" }`); **admin-only** (403 for recruiters)
+- `PUT /api/company/settings` — update company profile (`{ name?, brand_color?, nav_color?, accent_color? }`); **admin-only**, name 1–120 chars, `brand_color`/`nav_color`/`accent_color` validated as `#rrggbb` (or `null` to clear a color back to the theme default)
+- `PUT /api/company/logo` — upload/replace the company logo (multipart `logo`, png/jpg/jpeg/gif/webp/svg/avif, max 5 MB); **admin-only**
+- `DELETE /api/company/logo` — remove the company logo; **admin-only**
 
 ### Public portal routes (no auth)
 
 - `GET /api/public/jobs` — open roles (company-internal fields stripped, includes that job's screening questions)
+- `GET /api/public/company` — public company brand (`id`, `name`, `brand_color`, `logo_path`, `nav_color`, `accent_color`) shown as the portal logo/heading
+- `GET /api/company/logo` — public company logo image (no auth) with a short cache header
 - `GET /api/public/jobs/:id` — single open role
 - `GET /api/public/questionnaire` — EEO / self-identification questions (Workday-style, privacy banner included)
 - `POST /api/public/resume/parse` — upload a resume (`.pdf`, `.docx`, `.txt`, max 5 MB) and get back auto-filled contact/skills/summary fields

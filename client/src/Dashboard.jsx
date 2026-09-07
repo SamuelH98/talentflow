@@ -1,19 +1,81 @@
 import React, { useEffect, useState } from 'react';
+import {
+  Alert,
+  Box,
+  Button,
+  Grid,
+  Paper,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Typography,
+} from '@mui/material';
+import {
+  Group as GroupIcon,
+  BusinessCenter as BriefcaseIcon,
+  Inbox as InboxIcon,
+  CalendarMonth as CalendarIcon,
+  EmojiEvents as TrophyIcon,
+  ListAlt as ListIcon,
+  ChevronRight as ChevronRightIcon,
+  Add as AddIcon,
+} from '@mui/icons-material';
 import { api } from './api.js';
-import { Icon } from './Icons.jsx';
-import { Avatar, Badge, Spinner, timeAgo } from './ui.jsx';
+import { EmptyState, PersonAvatar, Pill, Spinner, StatusChip, timeAgo } from './kit.jsx';
 
-function Kpi({ icon, tone, label, value, sub, trend }) {
+function Kpi({ icon, tone, label, value, sub }) {
+  const varName = { green: 'success', amber: 'warning', accent: 'accent2' }[tone] || 'primary';
   return (
-    <div className="stat">
-      <div className="stat-top">
-        <span className="label">{label}</span>
-        <span className={`icon-chip ${tone || ''}`}><Icon name={icon} /></span>
-      </div>
-      <div className="value">{value}</div>
-      <div className="sub">{sub}</div>
-      {trend && <div className={`trend ${trend.dir}`}>{trend.text}</div>}
-    </div>
+    <Paper variant="outlined" sx={{ p: 2.25, height: '100%' }}>
+      <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
+        <Typography sx={{ color: 'text.secondary', fontSize: 13, fontWeight: 600 }}>{label}</Typography>
+        <Box
+          sx={{
+            width: 38,
+            height: 38,
+            borderRadius: 3,
+            display: 'grid',
+            placeItems: 'center',
+            color: `var(--mui-palette-${varName}-main)`,
+            background: `color-mix(in srgb, var(--mui-palette-${varName}-main) 12%, transparent)`,
+          }}
+        >
+          {icon}
+        </Box>
+      </Stack>
+      <Typography sx={{ fontSize: 28, fontWeight: 750, letterSpacing: '-0.02em', mt: 0.25 }}>{value}</Typography>
+      <Typography sx={{ color: 'text.disabled', fontSize: 12 }}>{sub}</Typography>
+    </Paper>
+  );
+}
+
+function ScoreBadge({ score }) {
+  const color = score >= 70 ? 'success' : score >= 40 ? 'warning' : 'default';
+  const varName = color === 'default' ? 'text' : color;
+  return (
+    <Box
+      component="span"
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 0.5,
+        px: 1.25,
+        py: 0.3,
+        borderRadius: 999,
+        fontSize: 12,
+        fontWeight: 650,
+        color: color === 'default' ? 'text.secondary' : '#fff',
+        background: color === 'default'
+          ? 'action.selected'
+          : `var(--mui-palette-${varName}-main)`,
+      }}
+    >
+      {score}
+    </Box>
   );
 }
 
@@ -57,99 +119,132 @@ export default function Dashboard({ companyName = 'your company', onNavigate }) 
   }, []);
 
   return (
-    <div>
-      <div className="content-header">
-        <div>
-          <h1>Good morning, recruiter.</h1>
-          <p>{companyName} — here's your hiring workspace at a glance.</p>
-        </div>
-        <div className="content-header-actions">
-          <button className="btn secondary" onClick={() => onNavigate('candidates')}><Icon name="plus" size={16} /> Add candidate</button>
-          <button className="btn secondary" onClick={() => onNavigate('jobs')}><Icon name="briefcase" size={16} /> Add job</button>
-        </div>
-      </div>
+    <Box>
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 2.75, justifyContent: 'space-between', alignItems: { xs: 'flex-start', md: 'center' } }}>
+        <Box>
+          <Typography variant="h4" sx={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em' }}>
+            Good morning, recruiter.
+          </Typography>
+          <Typography sx={{ color: 'text.secondary', fontSize: 13.5, mt: 0.5 }}>
+            {companyName} — your talent pool and hiring projects at a glance.
+          </Typography>
+        </Box>
+        <Stack direction="row" spacing={1}>
+          <Button variant="outlined" startIcon={<AddIcon sx={{ fontSize: 16 }} />} onClick={() => onNavigate('candidates')}>
+            Add candidate
+          </Button>
+          <Button variant="outlined" startIcon={<BriefcaseIcon sx={{ fontSize: 16 }} />} onClick={() => onNavigate('jobs')}>
+            Add job
+          </Button>
+        </Stack>
+      </Stack>
 
-      {error && <div className="banner" style={{ background: 'var(--danger-soft)', borderColor: '#f5c2c2', color: '#991b1b' }}><Icon name="shield" />{error}</div>}
+      {error && <Alert severity="error" sx={{ mb: 2.5, alignItems: 'center' }}>{error}</Alert>}
 
-      {!stats ? <Spinner /> : (
+      {!stats ? (
+        <Spinner />
+      ) : (
         <>
-          <div className="stat-grid">
-            <Kpi icon="users" label="Candidates" value={stats.candidates} sub={`${stats.activeCandidates} active in pipeline`} />
-            <Kpi icon="briefcase" tone="green" label="Open jobs" value={stats.openJobs} sub={`${stats.jobs} total roles`} />
-            <Kpi icon="inbox" tone="amber" label="Applications" value={stats.applications} sub="across all shortlists" />
-            <Kpi icon="calendar" tone="green" label="In interviews" value={stats.interviewCount} sub={`${stats.hiredCount} hired to date`} />
-          </div>
+          <Grid container spacing={2} sx={{ mb: 3 }}>
+            {[
+              { label: 'Candidates', value: stats.candidates, sub: `${stats.activeCandidates} active in pipeline`, icon: <GroupIcon fontSize="small" />, tone: 'accent' },
+              { label: 'Open jobs', value: stats.openJobs, sub: `${stats.jobs} total roles`, icon: <BriefcaseIcon fontSize="small" />, tone: 'green' },
+              { label: 'Applications', value: stats.applications, sub: 'across all shortlists', icon: <InboxIcon fontSize="small" />, tone: 'amber' },
+              { label: 'In interviews', value: stats.interviewCount, sub: `${stats.hiredCount} hired to date`, icon: <CalendarIcon fontSize="small" />, tone: 'green' },
+            ].map((k) => (
+              <Grid key={k.label} size={{ xs: 12, sm: 6, lg: 3 }}>
+                <Kpi label={k.label} value={k.value} sub={k.sub} icon={k.icon} tone={k.tone} />
+              </Grid>
+            ))}
+          </Grid>
 
-          <div className="row" style={{ marginBottom: 16, gap: 10 }}>
-            <button className="btn" onClick={() => onNavigate('matches')}><Icon name="trophy" size={16} /> View best candidates</button>
-            <button className="btn secondary" onClick={() => onNavigate('applications')}><Icon name="list" size={16} /> Open pipeline</button>
-          </div>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.25} sx={{ mb: 2.5 }}>
+            <Button startIcon={<TrophyIcon sx={{ fontSize: 16 }} />} onClick={() => onNavigate('matches')}>
+              Find best candidates
+            </Button>
+            <Button variant="outlined" startIcon={<ListIcon sx={{ fontSize: 16 }} />} onClick={() => onNavigate('projects')}>
+              Open projects & pipeline
+            </Button>
+          </Stack>
 
-          <div className="card flush">
-            <div style={{ padding: '20px 22px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <h2>🏆 Top matches across open roles</h2>
-              <button className="btn small ghost" onClick={() => onNavigate('matches')}>View all <Icon name="chevronRight" size={14} /></button>
-            </div>
+          <Paper variant="outlined" sx={{ overflow: 'hidden', mb: 2.5 }}>
+            <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', px: 2.75, pt: 2.5 }}>
+              <Typography sx={{ fontSize: 17, fontWeight: 650, letterSpacing: '-0.01em' }}>Top matches across open roles</Typography>
+<Button variant="contained" size="small" onClick={() => onNavigate('matches')} sx={{ color: '#fff', fontWeight: 600 }}>
+                  View all <ChevronRightIcon sx={{ fontSize: 14 }} />
+                </Button>
+            </Stack>
             {stats.top.length === 0 ? (
-              <div className="empty">
-                <div className="empty-icon"><Icon name="trophy" size={26} /></div>
-                <h3>No matches yet</h3>
-                <p>Add candidates and jobs, then visit Best Candidates to see who ranks on top.</p>
-              </div>
+              <EmptyState title="No matches yet" message="Add candidates and jobs, then visit Best Candidates to see who ranks on top." />
             ) : (
-              <div className="table-wrap">
-                <table className="data">
-                  <thead>
-                    <tr><th>Candidate</th><th>Job</th><th>Skills</th><th>Score</th></tr>
-                  </thead>
-                  <tbody>
+              <TableContainer>
+                <Table size="small" sx={{ '& td, & th': { borderColor: 'divider' } }}>
+                  <TableHead>
+                    <TableRow>
+                      {['Candidate', 'Job', 'Skills', 'Score'].map((h) => (
+                        <TableCell key={h} sx={{ fontSize: 11.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.disabled', py: 1.25 }}>
+                          {h}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
                     {stats.top.map((c) => (
-                      <tr key={`${c.id}-${c.job_title}`} style={{ cursor: 'pointer' }} onClick={() => onNavigate('matches')}>
-                        <td>
-                          <div className="row">
-                            <Avatar name={c.name} size="sm" seed={c.id} />
-                            <div>
-                              <div className="bold">{c.name}</div>
-                              <div className="muted small">{c.title || c.location || '—'}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="muted">{c.job_title}</td>
-                        <td>{(c.skills || []).slice(0, 3).map((s) => <span key={`${c.id}-${s}`} className="pill">{s}</span>)}</td>
-                        <td>
-                          <span className={`badge ${c.score >= 70 ? 'green' : c.score >= 40 ? 'amber' : 'gray'}`}>
-                            {c.score} <span className="dot" />
-                          </span>
-                        </td>
-                      </tr>
+                      <TableRow key={`${c.id}-${c.job_title}`} hover onClick={() => onNavigate('matches')} sx={{ cursor: 'pointer' }}>
+                        <TableCell>
+                          <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center' }}>
+                            <PersonAvatar name={c.name} size="sm" seed={c.id} />
+                            <Box>
+                              <Typography sx={{ fontWeight: 700, fontSize: 13.5 }}>{c.name}</Typography>
+                              <Typography sx={{ color: 'text.secondary', fontSize: 12 }}>{c.title || c.location || '—'}</Typography>
+                            </Box>
+                          </Stack>
+                        </TableCell>
+                        <TableCell sx={{ color: 'text.secondary', fontSize: 13 }}>{c.job_title}</TableCell>
+                        <TableCell>
+                          {(c.skills || []).slice(0, 3).map((s) => <Pill key={`${c.id}-${s}`}>{s}</Pill>)}
+                        </TableCell>
+                        <TableCell>
+                          <ScoreBadge score={c.score} />
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
-              </div>
+                  </TableBody>
+                </Table>
+              </TableContainer>
             )}
-          </div>
+          </Paper>
 
-          <div className="card">
-            <h2 style={{ marginBottom: 14 }}>Recent pipeline activity</h2>
+          <Paper variant="outlined" sx={{ p: 2.75 }}>
+            <Typography sx={{ fontSize: 17, fontWeight: 650, letterSpacing: '-0.01em', mb: 1.75 }}>Recent pipeline activity</Typography>
             {recent.length === 0 ? (
-              <p className="muted small">Shortlist a candidate from Best Candidates to start your pipeline.</p>
+              <Typography sx={{ color: 'text.secondary', fontSize: 13 }}>
+                Shortlist a candidate from Best Candidates to start your pipeline.
+              </Typography>
             ) : (
-              <div>
+              <Box>
                 {recent.map((a) => (
-                  <div className="app-row" key={a.id}>
-                    <Avatar name={a.candidate_name} size="sm" seed={a.candidate_id} />
-                    <div className="primary">
-                      <div className="small"><b>{a.candidate_name}</b> <span className="muted">→ {a.job_title}</span></div>
-                      <div className="faint small">{timeAgo(a.created_at)}</div>
-                    </div>
-                    <Badge status={a.status} />
-                  </div>
+                  <Stack
+                    key={a.id}
+                    direction="row"
+                    spacing={1.5}
+                    sx={{ py: 1.4, borderBottom: '1px solid', borderColor: 'divider', '&:last-child': { borderBottom: 'none' }, alignItems: 'center' }}
+                  >
+                    <PersonAvatar name={a.candidate_name} size="sm" seed={a.candidate_id} />
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography sx={{ fontSize: 13 }}>
+                        <b>{a.candidate_name}</b> <span style={{ color: 'inherit' }}>→ {a.job_title}</span>
+                      </Typography>
+                      <Typography sx={{ color: 'text.disabled', fontSize: 12 }}>{timeAgo(a.created_at)}</Typography>
+                    </Box>
+                    <StatusChip status={a.status} />
+                  </Stack>
                 ))}
-              </div>
+              </Box>
             )}
-          </div>
+          </Paper>
         </>
       )}
-    </div>
+    </Box>
   );
 }

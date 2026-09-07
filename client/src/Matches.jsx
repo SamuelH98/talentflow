@@ -1,65 +1,58 @@
 import React, { useEffect, useState } from 'react';
+import {
+  Alert,
+  Box,
+  Button,
+  Grid,
+  InputLabel,
+  MenuItem,
+  Paper,
+  Select,
+  Snackbar,
+  Stack,
+  Typography,
+} from '@mui/material';
 import { api, getToken } from './api.js';
-
-function ScoreCircle({ score }) {
-  const cls = score >= 70 ? 'high' : score >= 40 ? 'mid' : 'low';
-  return <div className={`score-circle ${cls}`}>{score}</div>;
-}
-
-function Breakdown({ b }) {
-  if (!b) return null;
-  const rows = [
-    { label: 'Skills', val: b.skillScore },
-    { label: 'Experience', val: b.expScore },
-    { label: 'Years', val: b.yearsScore },
-  ];
-  return (
-    <div className="breakdown">
-      {rows.map((r) => (
-        <div className="breakdown-row" key={r.label}>
-          <span>{r.label}</span>
-          <div className="bar-bg"><div className="bar" style={{ width: `${r.val}%` }} /></div>
-          <span className="bold" style={{ width: 34 }}>{r.val}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
+import { BreakdownBars, EmptyState, Pill, ScoreCircle, Spinner } from './kit.jsx';
 
 function CandidateCard({ c, job, onShortlist }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="card" style={{ marginBottom: 12 }}>
-      <div className="row">
+    <Paper variant="outlined" sx={{ p: 2.25, mb: 1.5 }}>
+      <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
         <ScoreCircle score={c.score} />
-        <div style={{ flex: 1 }}>
-          <div className="bold" style={{ fontSize: 15 }}>{c.name}</div>
-          <div className="muted small">{c.title || 'No title'} · {c.location || '—'}</div>
-        </div>
-        <button className="btn small secondary" onClick={() => setOpen(!open)}>{open ? 'Hide details' : 'Details'}</button>
-        <button className="btn small" onClick={() => onShortlist(job, c)}>Shortlist</button>
-      </div>
+        <Box sx={{ flex: 1, minWidth: 180 }}>
+          <Typography sx={{ fontSize: 15, fontWeight: 700 }}>{c.name}</Typography>
+          <Typography sx={{ color: 'text.secondary', fontSize: 13 }}>
+            {c.title || 'No title'} · {c.location || '—'}
+          </Typography>
+        </Box>
+        <Button variant="outlined" size="small" onClick={() => setOpen(!open)}>
+          {open ? 'Hide details' : 'Details'}
+        </Button>
+        <Button size="small" onClick={() => onShortlist(job, c)}>Shortlist</Button>
+      </Stack>
       {open && (
-        <div style={{ marginTop: 12 }}>
-          {c.summary && <p className="small">{c.summary}</p>}
-          <div className="small">
-            <div className="muted" style={{ marginBottom: 4 }}>Skills</div>
-            <div>{(c.skills || []).map((s) => <span key={s} className="pill">{s}</span>)}</div>
-          </div>
-          <div className="muted small" style={{ marginTop: 10 }}>Match breakdown</div>
-          <Breakdown b={c.breakdown} />
+        <Box sx={{ mt: 1.5 }}>
+          {c.summary && <Typography sx={{ fontSize: 13 }}>{c.summary}</Typography>}
+          <Stack spacing={0.5} sx={{ mt: 1 }}>
+            <Typography sx={{ color: 'text.secondary', fontSize: 12.5 }}>Skills</Typography>
+            <Box>{(c.skills || []).map((s) => <Pill key={s}>{s}</Pill>)}</Box>
+          </Stack>
+          <Typography sx={{ color: 'text.secondary', fontSize: 12.5, mt: 1.5 }}>Match breakdown</Typography>
+          <BreakdownBars b={c.breakdown} />
           {c.breakdown?.skillHits?.length > 0 && (
-            <div className="small muted" style={{ marginTop: 8 }}>
+            <Typography sx={{ color: 'text.secondary', fontSize: 13, mt: 1 }}>
               Overlapping skills: {c.breakdown.skillHits.join(', ')}
-            </div>
+            </Typography>
           )}
-        </div>
+        </Box>
       )}
-    </div>
+    </Paper>
   );
 }
 
-export default function Matches() {
+export default function Matches({ query: jobQuery = '' }) {
   const [jobs, setJobs] = useState([]);
   const [candCount, setCandCount] = useState({ total: 0, active: 0 });
   const [selectedJob, setSelectedJob] = useState(null);
@@ -69,13 +62,12 @@ export default function Matches() {
   const [shortlistMsg, setShortlistMsg] = useState('');
 
   useEffect(() => {
-    const q = new URLSearchParams(window.location.search);
     (async () => {
       try {
         const [jobList, candList, matches] = await Promise.all([api.jobs(), api.candidates(), api.matchesAll()]);
         setJobs(jobList);
         setCandCount({ total: candList.length, active: candList.filter((c) => c.status !== 'archived').length });
-        const fromQuery = Number(q.get('job'));
+        const fromQuery = jobQuery ? Number(jobQuery) : 0;
         const initial = jobList.find((j) => j.id === fromQuery) || jobList[0];
         if (initial) {
           setSelectedJob(initial);
@@ -88,7 +80,7 @@ export default function Matches() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [jobQuery]);
 
   const selectJob = async (id) => {
     setSelectedJob(jobs.find((j) => j.id === id));
@@ -100,7 +92,6 @@ export default function Matches() {
     try {
       await api.createApplication({ job_id: job.id, candidate_id: c.id, score: c.score, notes: `Matched ${c.score}/100` });
       setShortlistMsg(`Shortlisted ${c.name} for ${job.title}`);
-      setTimeout(() => setShortlistMsg(''), 3000);
     } catch (e) {
       setError(e.message);
     }
@@ -109,61 +100,82 @@ export default function Matches() {
   if (!getToken()) return null;
 
   return (
-    <div>
-      <div className="content-header">
-        <div>
-          <h1>Best Candidates</h1>
-          <p className="muted">
-            Ranked by skills, experience fit and required years.
-            Scoring: 50% skill match · 30% experience fit · 20% required years.
-          </p>
-        </div>
-        <select className="status-select" value={selectedJob?.id || ''} onChange={(e) => selectJob(Number(e.target.value))}>
-          {jobs.map((j) => <option key={j.id} value={j.id}>{j.title}</option>)}
-        </select>
-      </div>
+    <Box>
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 2.75, justifyContent: 'space-between', alignItems: { xs: 'flex-start', md: 'flex-end' } }}>
+        <Box>
+          <Typography variant="h4" sx={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em' }}>Best Candidates</Typography>
+          <Typography sx={{ color: 'text.secondary', fontSize: 13.5, mt: 0.5, maxWidth: 640 }}>
+            Ranked by skills, experience fit and required years. Scoring: 50% skill match · 30% experience fit · 20% required years.
+          </Typography>
+        </Box>
+        <Box sx={{ minWidth: 220 }}>
+          <InputLabel shrink htmlFor="job-select" sx={{ fontSize: 12, color: 'text.secondary' }}>Job</InputLabel>
+          <Select id="job-select" size="small" value={selectedJob?.id || ''} onChange={(e) => selectJob(Number(e.target.value))} fullWidth>
+            {jobs.map((j) => <MenuItem key={j.id} value={j.id}>{j.title}</MenuItem>)}
+          </Select>
+        </Box>
+      </Stack>
 
-      {shortlistMsg && <div className="toast">{shortlistMsg}</div>}
-      {error && <div className="toast error">{error}</div>}
-      {loading && <div className="muted">Loading matches…</div>}
+      {error && <Alert severity="error" sx={{ mb: 2, alignItems: 'center' }}>{error}</Alert>}
+      {loading && <Spinner label="Loading matches…" />}
 
       {!loading && data && (
         <>
-          <div className="stat-grid">
-            <div className="stat">
-              <div className="label">Job</div>
-              <div className="value" style={{ fontSize: 18 }}>{data.job.title}</div>
-              <div className="sub">matching against {candCount.active} active candidates</div>
-            </div>
-            <div className="stat">
-              <div className="label">Candidates ranked</div>
-              <div className="value">{data.candidates.length}</div>
-              <div className="sub">from {candCount.total} total in pipeline</div>
-            </div>
-            <div className="stat">
-              <div className="label">Top match</div>
-              <div className="value">{data.candidates[0] ? <ScoreCircle score={data.candidates[0].score} /> : '—'}</div>
-              <div className="sub">{data.candidates[0]?.name || 'no candidates'}</div>
-            </div>
-          </div>
+          <Grid container spacing={2} sx={{ mb: 2.5 }}>
+            <Grid size={{ xs: 12, sm: 4 }}>
+              <Paper variant="outlined" sx={{ p: 2.25, height: '100%' }}>
+                <Typography sx={{ color: 'text.secondary', fontSize: 13, fontWeight: 600 }}>Job</Typography>
+                <Typography sx={{ fontSize: 18, fontWeight: 700, mt: 0.25 }}>{data.job.title}</Typography>
+                <Typography sx={{ color: 'text.disabled', fontSize: 12 }}>matching against {candCount.active} active candidates</Typography>
+              </Paper>
+            </Grid>
+            <Grid size={{ xs: 12, sm: 4 }}>
+              <Paper variant="outlined" sx={{ p: 2.25, height: '100%' }}>
+                <Typography sx={{ color: 'text.secondary', fontSize: 13, fontWeight: 600 }}>Candidates ranked</Typography>
+                <Typography sx={{ fontSize: 28, fontWeight: 750, letterSpacing: '-0.02em', mt: 0.25 }}>{data.candidates.length}</Typography>
+                <Typography sx={{ color: 'text.disabled', fontSize: 12 }}>from {candCount.total} total in pipeline</Typography>
+              </Paper>
+            </Grid>
+            <Grid size={{ xs: 12, sm: 4 }}>
+              <Paper variant="outlined" sx={{ p: 2.25, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <Typography sx={{ color: 'text.secondary', fontSize: 13, fontWeight: 600 }}>Top match</Typography>
+                <Box sx={{ mt: 1 }}>
+                  {data.candidates[0] ? <ScoreCircle score={data.candidates[0].score} /> : <Typography sx={{ fontSize: 18 }}>—</Typography>}
+                </Box>
+                <Typography sx={{ color: 'text.disabled', fontSize: 12 }}>{data.candidates[0]?.name || 'no candidates'}</Typography>
+              </Paper>
+            </Grid>
+          </Grid>
 
-          <div className="row between" style={{ marginBottom: 12 }}>
-            <h2>Ranked candidates</h2>
-          </div>
+          <Typography sx={{ fontSize: 17, fontWeight: 650, letterSpacing: '-0.01em', mb: 1.5 }}>Ranked candidates</Typography>
           {data.candidates.length === 0 ? (
-            <div className="card empty"><h3>No candidates</h3><p>Add candidates to see who matches.</p></div>
+            <Paper variant="outlined">
+              <EmptyState title="No candidates" message="Add candidates to see who matches." />
+            </Paper>
           ) : (
-            data.candidates.map((c, i) => (
-              <div className="row" key={c.id} style={{ alignItems: 'flex-start' }}>
-                <div style={{ minWidth: 36, textAlign: 'center', paddingTop: 18, fontWeight: 700, color: '#94a3b8', fontSize: 18 }}>{i + 1}</div>
-                <div style={{ flex: 1 }}>
-                  <CandidateCard c={c} job={data.job} onShortlist={shortlist} />
-                </div>
-              </div>
-            ))
+            <Box>
+              {data.candidates.map((c, i) => (
+                <Stack key={c.id} direction="row" sx={{ alignItems: 'flex-start' }} spacing={1.25}>
+                  <Typography sx={{ minWidth: 30, textAlign: 'center', pt: 2.5, fontWeight: 700, color: 'text.disabled', fontSize: 18 }}>
+                    {i + 1}
+                  </Typography>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <CandidateCard c={c} job={data.job} onShortlist={shortlist} />
+                  </Box>
+                </Stack>
+              ))}
+            </Box>
           )}
         </>
       )}
-    </div>
+
+      <Snackbar
+        open={!!shortlistMsg}
+        autoHideDuration={3000}
+        onClose={() => setShortlistMsg('')}
+        message={shortlistMsg}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
+    </Box>
   );
 }

@@ -30,18 +30,34 @@ test('public candidate portal: browse jobs, apply, track status', async () => {
     assert.equal(jobs[0].title, 'Frontend Engineer');
     assert.ok(!('company_id' in jobs[0]), 'should not leak company_id');
 
+    // public company brand (logo initials + name) exposes only the safe fields
+    const company = await (await fetch(`${base}/api/public/company`)).json();
+    assert.equal(company.name, 'Portal Co');
+    assert.equal(company.id, co);
+    assert.deepEqual(Object.keys(company).sort(), ['accent_color', 'brand_color', 'id', 'logo_path', 'name', 'nav_color']);
+    assert.equal(company.brand_color, null);
+    assert.equal(company.logo_path, null);
+    assert.equal(company.nav_color, null);
+    assert.equal(company.accent_color, null);
+
     // apply (one-click)
     const apply = await (await fetch(`${base}/api/public/applications`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ job_id: jobId, name: 'Portal Applicant', email: 'portal@x.com', skills: ['React'], consent: true }),
+      body: JSON.stringify({
+        job_id: jobId, name: 'Portal Applicant', email: 'portal@x.com', skills: ['React'],
+        education: ['B.S. Computer Science'], experience: ['Engineer — 2020–present'],
+        consent: true,
+      }),
     })).json();
     assert.ok(apply.tracking_token);
     assert.equal(apply.status, 'matched');
 
-    // candidate + application were created
+    // candidate + application were created, education/experience stored
     const cand = db.prepare('SELECT * FROM candidates WHERE email = ?').get('portal@x.com');
     assert.ok(cand, 'candidate should be auto-created from public apply');
+    assert.deepEqual(JSON.parse(cand.education), ['B.S. Computer Science']);
+    assert.deepEqual(JSON.parse(cand.experience), ['Engineer — 2020–present']);
 
     // consent is mandatory
     const noConsent = await fetch(`${base}/api/public/applications`, {

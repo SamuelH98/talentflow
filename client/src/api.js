@@ -43,8 +43,18 @@ async function request(path, options = {}) {
 export const api = {
   login: (email, password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
   me: () => request('/me'),
+  updateCompanySettings: (data) => request('/company/settings', { method: 'PUT', body: JSON.stringify(data) }),
+  updateCompanyLogo: (file) => {
+    const fd = new FormData();
+    fd.append('logo', file);
+    return request('/company/logo', { method: 'PUT', body: fd });
+  },
+  removeCompanyLogo: () => request('/company/logo', { method: 'DELETE' }),
+  lookupCompanies: (q) => request(`/company/lookup?q=${encodeURIComponent(q)}`),
+  adoptCompanyBranding: (data) => request('/company/adopt', { method: 'POST', body: JSON.stringify(data) }),
 
   candidates: () => request('/candidates'),
+  search: (q) => request(`/search?q=${encodeURIComponent(q)}`),
   candidate: (id) => request(`/candidates/${id}`),
   createCandidate: (data) => request('/candidates', { method: 'POST', body: JSON.stringify(data) }),
   updateCandidate: (id, data) => request(`/candidates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -70,6 +80,7 @@ export const api = {
   saveJobScreening: (id, questions) => request(`/jobs/${id}/screening`, { method: 'PUT', body: JSON.stringify({ questions }) }),
 
   publicJobs: () => request('/public/jobs'),
+  publicCompany: () => request('/public/company'),
   publicJob: (id) => request(`/public/jobs/${id}`),
   publicQuestionnaire: () => request('/public/questionnaire'),
   publicPrivacy: () => request('/public/privacy'),

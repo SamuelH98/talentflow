@@ -9,7 +9,7 @@ TalentFlow — local hiring & candidate-ranking app
 A locally hosted "Workday-lite" where companies add jobs and candidates, and the app automatically scores/ranks the best candidates per job with transparent match breakdowns.
 
 ### Current Status
-Recruiter UI + public candidate portal shipped. EEO questions + local resume parsing, recruiter-managed screening questions (library + per-job config), recruiter-only dark mode (OS default + toggle + company brand in topbar), publishability packing (AGPL, Docker, prod serving — committed `0d00bfc`), and candidate privacy/consent + audit log (Milestone B) all implemented with **23 passing server tests**; client builds cleanly.
+Recruiter UI + public candidate portal shipped. EEO questions + local resume parsing, recruiter-managed screening questions (library + per-job config), recruiter-only dark mode (OS default + toggle + company brand in topbar), publishability packing (AGPL, Docker, prod serving — committed `0d00bfc`), candidate privacy/consent + audit log (Milestone B), **company brand theming** (admin-set brand + nav/accent colors + live preview, driving the entire recruiter app + candidate portal, persisted per-company), **company logo** (admin upload in org settings, shown across topbar/login/portal), and a **global topbar search** (live dropdown across candidates/jobs/applications) all implemented with **25 passing server tests**; client builds cleanly.
 
 Milestone B (candidate privacy + consent) is implemented and documented: applications require consent (stored `consented_at` + `policy_version`), the portal offers "Manage my data" (portable JSON export + token-gated full erasure incl. the resume file), the recruiter UI has an Activity log (company-scoped audit trail with sign-ins, candidate/job changes, stage changes, self-service erasures), and end-to-end smoke tests verified apply → export → erasure → audit over HTTP. Remaining: client build + the Milestone B commit.
 
@@ -40,6 +40,18 @@ Milestone B (candidate privacy + consent) is implemented and documented: applica
 - Topbar now leads with the recruiting company's avatar/name; TalentFlow is the smaller secondary line.
 #### Tests Added
 - None (CSS/UI); backend unchanged and covered.
+
+### Feature: Company brand theming (admin-set brand color)
+#### Validation
+- `companies` gained `brand_color` (PRAGMA-checked migration in `db.js`); `GET /api/public/company` and `GET /api/me` expose it, `PUT /api/company/brand` (admin-only, `#rrggbb` validated) persists + audits it.
+- Client theme rebuilt on the fly from the brand color: `buildTheme({ kind, brand })` derives the MUI primary ramp (`main`/`dark`/`light` + contrast, light + dark schemes), and helpers `brandGradient`/`displayOnBrand` color the login hero, the recruiter logo box, and the portal brand mark. Fallback default is indigo (`#4f46e5`) via `DEFAULT_BRAND`/`normalizeHex` for invalid/missing values.
+- Admin topbar button opens a swatch dialog (presets + native hex input + "Reset to default"); saved via `api.setCompanyBrand`, updates `user.company` in app state so both the recruiter app and portal re-theme live. Non-admins don't see the button; the endpoint returns 403 for recruiters.
+- **Org settings modal:** the color picker moved into an **Organization settings** dialog (topbar gear) that also edits the company name — persisted via `PUT /api/company/settings` (admin-only, name + brand_color validated, audited as `company.update`). Recruiters still see the gear but get an "ask your org admin" dialog instead; the settings endpoint returns 403 for them. Login screen also shows the company mark + name ("Powered by TalentFlow") and brand gradient from `GET /api/public/company`.
+- **Dashboard color customization:** three editable colors — **brand** (primary accent app-wide), **navigation** (`nav_color`, left sidebar background + auto-contrast text), and **accent** (`accent_color`, KPI/status highlights via the `accent2` theme token). Stored per-company (`companies.nav_color`/`accent_color`, PRAGMA migrations), exposed via `/api/me` + `/api/public/company`. **Live preview:** picking a color re-skins the app behind the modal instantly (`themePreview` override feeds `buildTheme`); Save persists, Cancel/ESC reverts to the stored colors.
+- **Company logo:** admin can upload/replace/remove the logo in the same settings modal (`PUT/DELETE /api/company/logo`, multipart `logo`, png/jpg/jpeg/gif/webp/svg/avif ≤ 5 MB; old file deleted on replace/remove). `GET /api/company/logo` serves it publicly and `GET /api/public/company` exposes `logo_path`; the shared `CompanyMark` component renders the image everywhere (topbar, login hero, portal head, settings preview) and falls back to a brand-gradient initial when no logo / invalid image.
+- **Global search:** a centered topbar search opens a live dropdown (debounced `GET /api/search?q=` across candidates/jobs/applications), de-duped/grouped results navigate to the section with the filter applied; empty-state "jump to" quick links and Enter-to-open Candidates. Neutrally-gray styling (no brand tint) and a rounded dropdown matching app cards.
+#### Tests Added
+- `server/tests/api.test.js` — brand test covers 401 unauthenticated, 403 recruiter, 400 bad hex, admin update persists, reflected in `/api/public/company` + `/api/me`; settings test covers 403 recruiter, 400 blank name, admin name+brand+nav+accent update, 400 bad nav hex, public reflection; logo test covers 403 non-admin upload, admin upload round-trip (`logo_path` set + served via `GET /api/company/logo`), delete (null + 404); global-search test covers candidate/job match, candidate-by-name, application-by-candidate-name, no-match empties, 401 unauth. `public.test.js` public-company shape now includes `brand_color`, `logo_path`, `nav_color`, `accent_color`. Total suite: 25 passing.
 
 ---
 
@@ -116,14 +128,20 @@ Milestone B (candidate privacy & consent) is implemented server + client and doc
 - **Erasure token design:** DSAR export returns one of the candidate's application `tracking_token`s as proof-of-ownership; a separate random token was tried and reverted after the exported token never matched an application.
 
 ### Remaining Work (Milestone B)
-1. Client build (`npm run build`) + full suite (`npm test` → 23) — already green.
+1. Client build (`npm run build`) + full suite (`npm test` → 24) — already green.
 2. Commit Milestone B ("Candidate privacy: consent, export/erasure flow, and audit log").
 
 ---
 
 ## Next Actions
 
-1. **Commit Milestone B** — verify `npm test` (23) + client build, commit the privacy/consent/audit work.
+1. **Commit brand theming** — verify `npm test` (24) + client build, commit the company-brand-color work.
+
+---
+
+## Next Actions
+
+1. **Commit Milestone B** — verify `npm test` (24) + client build, commit the privacy/consent/audit work. (Brand theming commits next.)
 2. (Optional) Public portal hardening when exposed publicly: cap lookup rate, add basic bot protection on `POST /api/public/applications`.
 3. (Optional) Add candidate "archived" state toggle in UI (backend filter already honors it).
 
@@ -157,7 +175,7 @@ Milestone B (candidate privacy & consent) is implemented server + client and doc
 
 ## Resume Instructions
 
-- **Verify current state:** `cd ~/git/talentflow/server && npm test` (expect 23 passing), then `cd ~/git/talentflow/client && npm run build`.
+- **Verify current state:** `cd ~/git/talentflow/server && npm test` (expect 24 passing), then `cd ~/git/talentflow/client && npm run build`.
 - **Run the app:** from repo root: `npm run dev` → open http://localhost:5173, log in `demo@acmetalent.com` / `password`; portal at http://localhost:5173/#/portal (status pages live at `#/portal/status/<token>`). Production mode: `cd server && npm run start:prod` → http://localhost:4000 (single origin).
 - **Where to start reading:** `server/src/matching.js` (scoring core, pure functions), `server/src/index.js` (all routes incl. `/api/public/*` + `/api/screening/*` + prod static serving), `server/src/screening.js` (library, per-job config, answer sanitizing), `server/src/seed.js` (`seed()` export used for `SEED_ON_BOOT`), `server/src/resume.js` (resume extraction + auto-fill heuristics), `server/src/questionnaire.js` (EEO questions), `client/src/App.jsx` (routing + theme), `client/src/theme.js` (dark-mode hook), `client/src/CandidatePortal.jsx` (portal UI + ApplyModal), `client/src/Screening.jsx` (library UI).
 - **Next concrete step:** commit Milestone B (candidate privacy: consent, export/erasure flow, audit log) — see Next Actions.

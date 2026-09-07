@@ -1,7 +1,25 @@
 import React, { useEffect, useState } from 'react';
+import {
+  Alert,
+  Box,
+  Button,
+  Checkbox,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControlLabel,
+  Grid,
+  IconButton,
+  MenuItem,
+  Paper,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material';
+import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { api } from './api.js';
-import { Icon } from './Icons.jsx';
-import { Modal } from './ui.jsx';
+import { ConfirmDialog, EmptyState, Pill, StatusChip } from './kit.jsx';
 
 const TYPE_LABELS = {
   text: 'Short answer',
@@ -56,41 +74,80 @@ function QuestionForm({ initial, onSave, onClose }) {
 
   const choices = q.type === 'single' || q.type === 'multiple';
   return (
-    <Modal title={q.id ? 'Edit question' : 'Add question'} icon="filter" onClose={onClose}>
-      <div className="form-grid">
-        <div className="field full required"><label>Question</label>
-          <input value={q.label} onChange={(e) => set('label', e.target.value)} placeholder="e.g. Are you available to start immediately?" />
-        </div>
-        <div className="field full"><label>Description<span className="hint">optional</span></label>
-          <input value={q.description} onChange={(e) => set('description', e.target.value)} placeholder="Extra context shown to candidates" />
-        </div>
-        <div className="field full"><label>Answer type</label>
-          <select value={q.type} onChange={(e) => { set('type', e.target.value); if (e.target.value === 'text' || e.target.value === 'paragraph') set('options', []); }}>
-            {Object.entries(TYPE_LABELS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-          </select>
-        </div>
-        {choices && (
-          <div className="field full">
-            <label>Answer options</label>
-            {q.options.map((o, i) => (
-              <div className="option-row" key={i}>
-                <input value={o.value} placeholder="key" onChange={(e) => setOption(i, 'value', e.target.value)} className="option-key" disabled />
-                <input value={o.label} placeholder="Option label" onChange={(e) => setOption(i, 'label', e.target.value)} />
-                <button type="button" className="icon-btn" onClick={() => set('options', q.options.filter((_, j) => j !== i))} title="Remove"><Icon name="trash" size={15} /></button>
-              </div>
-            ))}
-            <button type="button" className="btn small secondary" onClick={() => set('options', [...q.options, { value: '', label: '' }])}>+ Add option</button>
-          </div>
-        )}
-        <label className="check-row"><input type="checkbox" checked={q.default_enabled} onChange={(e) => set('default_enabled', e.target.checked)} /> Apply to all jobs by default</label>
-        <label className="check-row"><input type="checkbox" checked={q.default_required} onChange={(e) => set('default_required', e.target.checked)} /> Required by default</label>
-      </div>
-      {err && <div className="banner" style={{ background: 'var(--danger-soft)', borderColor: 'var(--danger-border)', color: 'var(--danger)' }}><Icon name="shield" />{err}</div>}
-      <div className="footer">
-        <button className="btn secondary" onClick={onClose}>Cancel</button>
-        <button className="btn" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save question'}</button>
-      </div>
-    </Modal>
+    <Dialog open onClose={onClose} maxWidth="md" scroll="paper">
+      <DialogTitle sx={{ fontSize: 18, fontWeight: 700 }}>{q.id ? 'Edit question' : 'Add question'}</DialogTitle>
+      <DialogContent dividers>
+        <Grid container spacing={2}>
+          <Grid size={12}>
+            <TextField
+              required
+              label="Question"
+              value={q.label}
+              onChange={(e) => set('label', e.target.value)}
+              placeholder="e.g. Are you available to start immediately?"
+            />
+          </Grid>
+          <Grid size={12}>
+            <TextField
+              label="Description"
+              helperText="optional — extra context shown to candidates"
+              value={q.description}
+              onChange={(e) => set('description', e.target.value)}
+            />
+          </Grid>
+          <Grid size={12}>
+            <TextField
+              select
+              label="Answer type"
+              value={q.type}
+              onChange={(e) => { set('type', e.target.value); if (e.target.value === 'text' || e.target.value === 'paragraph') set('options', []); }}
+            >
+              {Object.entries(TYPE_LABELS).map(([k, l]) => <MenuItem key={k} value={k}>{l}</MenuItem>)}
+            </TextField>
+          </Grid>
+          {choices && (
+            <Grid size={12}>
+              <Typography sx={{ fontSize: 13, fontWeight: 650, color: 'text.secondary', mb: 1 }}>Answer options</Typography>
+              <Stack spacing={1}>
+                {q.options.map((o, i) => (
+                  <Stack key={i} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                    <TextField
+                      size="small"
+                      value={o.value}
+                      sx={{ width: 150 }}
+                      slotProps={{ htmlInput: { readOnly: true, style: { fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 12, color: 'text.disabled' } } }}
+                    />
+                    <TextField
+                      size="small"
+                      value={o.label}
+                      placeholder="Option label"
+                      onChange={(e) => setOption(i, 'label', e.target.value)}
+                    />
+                    <IconButton size="small" onClick={() => set('options', q.options.filter((_, j) => j !== i))} color="inherit" title="Remove">
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Stack>
+                ))}
+              </Stack>
+              <Button size="small" variant="outlined" sx={{ mt: 1.25 }} onClick={() => set('options', [...q.options, { value: '', label: '' }])}>
+                Add option
+              </Button>
+            </Grid>
+          )}
+          <Grid size={12}>
+            <FormControlLabel control={<Checkbox checked={q.default_enabled} onChange={(e) => set('default_enabled', e.target.checked)} />} label="Apply to all jobs by default" />
+          </Grid>
+          <Grid size={12}>
+            <FormControlLabel control={<Checkbox checked={q.default_required} onChange={(e) => set('default_required', e.target.checked)} />} label="Required by default" />
+          </Grid>
+        </Grid>
+        {err && <Alert severity="error" sx={{ mt: 2, alignItems: 'center' }}>{err}</Alert>}
+      </DialogContent>
+      <DialogActions sx={{ px: 3, py: 2 }}>
+        <Button onClick={onClose} sx={{ color: 'text.secondary' }}>Cancel</Button>
+        <Button onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save question'}</Button>
+      </DialogActions>
+    </Dialog>
   );
 }
 
@@ -100,6 +157,7 @@ export default function Screening() {
   const [error, setError] = useState('');
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [deleteQ, setDeleteQ] = useState(null);
 
   const load = async () => {
     setLoading(true); setError('');
@@ -107,53 +165,86 @@ export default function Screening() {
   };
   useEffect(() => { load(); }, []);
 
-  const remove = async (q) => {
-    if (!window.confirm(`Delete "${q.label}"? It will be removed from every job that uses it; past answers stay on file.`)) return;
-    try { await api.deleteScreeningQuestion(q.id); await load(); } catch (e) { setError(e.message); }
+  const remove = async () => {
+    try { await api.deleteScreeningQuestion(deleteQ.id); setDeleteQ(null); await load(); } catch (e) { setError(e.message); }
   };
 
   return (
-    <div>
-      <div className="content-header">
-        <div>
-          <h1>Screening questions</h1>
-          <p className="muted">Build a reusable question library. Each job lets you pick which questions apply, mark them required, and set the order.</p>
-        </div>
-        <button className="btn" onClick={() => setAdding(true)}>+ Add question</button>
-      </div>
+    <Box>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 2.75, justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' } }}>
+        <Box>
+          <Typography variant="h4" sx={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em' }}>Screening questions</Typography>
+          <Typography sx={{ color: 'text.secondary', fontSize: 13.5, mt: 0.5, maxWidth: 640 }}>
+            Build a reusable question library. Each job lets you pick which questions apply, mark them required, and set the order.
+          </Typography>
+        </Box>
+        <Button startIcon={<AddIcon sx={{ fontSize: 16 }} />} onClick={() => setAdding(true)}>Add question</Button>
+      </Stack>
 
-      {error && <div className="toast error">{error}</div>}
-      {loading && <div className="muted">Loading…</div>}
+      {error && <Alert severity="error" sx={{ mb: 2, alignItems: 'center' }}>{error}</Alert>}
+      {loading && <Typography sx={{ color: 'text.secondary' }}>Loading…</Typography>}
 
       {!loading && items.length === 0 && (
-        <div className="card empty"><h3>No screening questions yet</h3><p>Add a question and it'll show on the candidate portal apply form — on every job by default, or just the jobs you choose.</p></div>
+        <Paper variant="outlined">
+          <EmptyState title="No screening questions yet" message="Add a question and it'll show on the candidate portal apply form — on every job by default, or just the jobs you choose." />
+        </Paper>
       )}
 
-      <div className="screen-list">
+      <Stack spacing={1.5}>
         {items.map((q) => (
-          <div className="card screen-card" key={q.id}>
-            <div className="row between">
-              <div className="bold" style={{ fontSize: 15 }}>{q.label}</div>
-              <div className="row" style={{ gap: 6 }}>
-                <span className={`badge ${q.default_enabled ? 'green' : 'gray'}`}>{q.default_enabled ? 'On by default' : 'Manual'}</span>
-                {q.default_required && <span className="badge amber">Required</span>}
-              </div>
-            </div>
-            {q.description && <p className="muted small" style={{ margin: '6px 0' }}>{q.description}</p>}
-            <div className="small muted" style={{ marginTop: 6 }}>
-              <span className="pill">{TYPE_LABELS[q.type] || q.type}</span>
-              {q.type === 'single' || q.type === 'multiple' ? q.options.map((o) => <span key={o.value} className="pill ghost">{o.label}</span>) : null}
-            </div>
-            <div className="actions-row">
-              <button className="btn small" onClick={() => { setAdding(false); setEditing(q); }}>Edit</button>
-              <button className="btn small danger" onClick={() => remove(q)}>Delete</button>
-            </div>
-          </div>
+          <Paper variant="outlined" key={q.id} sx={{ p: 2.25 }}>
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} sx={{ justifyContent: 'space-between', alignItems: { xs: 'flex-start', md: 'center' } }}>
+              <Typography sx={{ fontSize: 15, fontWeight: 700 }}>{q.label}</Typography>
+              <Stack direction="row" spacing={1}>
+                <StatusChip status={q.default_enabled ? 'open' : 'closed'} />
+                <ChipLabel label={q.default_enabled ? 'On by default' : 'Manual'} />
+                {q.default_required && <ChipLabel label="Required" tone="warning" />}
+              </Stack>
+            </Stack>
+            {q.description && <Typography sx={{ color: 'text.secondary', fontSize: 13, mt: 0.75 }}>{q.description}</Typography>}
+            <Box sx={{ mt: 0.75 }}>
+              <Pill>{TYPE_LABELS[q.type] || q.type}</Pill>
+              {q.type === 'single' || q.type === 'multiple' ? q.options.map((o) => <Pill key={o.value}>{o.label}</Pill>) : null}
+            </Box>
+            <Stack direction="row" spacing={1} sx={{ mt: 1.5, pt: 1.5, borderTop: '1px solid', borderColor: 'divider', justifyContent: 'flex-end' }}>
+              <Button size="small" onClick={() => { setAdding(false); setEditing(q); }}>Edit</Button>
+              <Button size="small" variant="outlined" color="error" onClick={() => setDeleteQ(q)}>Delete</Button>
+            </Stack>
+          </Paper>
         ))}
-      </div>
+      </Stack>
 
       {adding && <QuestionForm initial={emptyQuestion()} onSave={async () => { setAdding(false); await load(); }} onClose={() => setAdding(false)} />}
       {editing && <QuestionForm initial={editing} onSave={async () => { setEditing(null); await load(); }} onClose={() => setEditing(null)} />}
-    </div>
+      <ConfirmDialog
+        open={!!deleteQ}
+        title="Delete this question?"
+        message={`"${deleteQ?.label || ''}" will be removed from every job that uses it; past answers stay on file.`}
+        onConfirm={remove}
+        onClose={() => setDeleteQ(null)}
+      />
+    </Box>
+  );
+}
+
+function ChipLabel({ label, tone }) {
+  return (
+    <Box
+      component="span"
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        px: 1.25,
+        borderRadius: 999,
+        fontSize: 12,
+        fontWeight: 650,
+        color: tone === 'warning' ? 'var(--mui-palette-warning-main)' : 'text.secondary',
+        background: tone === 'warning'
+          ? 'color-mix(in srgb, var(--mui-palette-warning-main) 12%, transparent)'
+          : 'action.selected',
+      }}
+    >
+      {label}
+    </Box>
   );
 }

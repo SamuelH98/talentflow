@@ -6,13 +6,14 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
-import { getDb, uploadsDir, resolveUploadsDir } from './db.js';
-import { requireAuth, signToken, logAudit } from './auth.js';
+import { getDb, getUploadsDir, resolveUploadsDir } from './db.js';
+import { requireAuth, requireAdmin, signToken, logAudit } from './auth.js';
 import { scoreCandidate, rankCandidates, parseSkills } from './matching.js';
 import { readResume, UnsupportedResumeError } from './resume.js';
 import { QUESTIONNAIRE, questionnairePublic } from './questionnaire.js';
 import { seed } from './seed.js';
 import { POLICY_VERSION, PRIVACY_NOTICE } from './privacy.js';
+import { sampleBrandColor } from './branding.js';
 import {
   effectiveQuestions,
   getLibrary,
@@ -40,6 +41,17 @@ const upload = multer({
     const ext = String((file.originalname || '').split('.').pop() || '').toLowerCase();
     if (RESUME_EXT.includes(ext)) cb(null, true);
     else cb(new Error('Unsupported file type. Use .pdf, .docx, or .txt'));
+  },
+});
+
+const LOGO_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif'];
+const uploadLogo = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ext = String((file.originalname || '').split('.').pop() || '').toLowerCase();
+    if (LOGO_EXT.includes(ext)) cb(null, true);
+    else cb(new Error('Unsupported logo type. Use .png, .jpg, .jpeg, .gif, .webp, .svg, or .avif'));
   },
 });
 
@@ -238,6 +250,47 @@ app.delete('/api/jobs/:id', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------- Global search ----------
+
+app.get('/api/search', requireAuth, (req, res) => {
+  const q = String(req.query.q || '').trim();
+  if (!q) return res.json({ candidates: [], jobs: [], applications: [] });
+  const db = getDb();
+  const like = `%${q.replace(/[%_]/g, (m) => '\\' + m)}%`;
+  const candidates = db
+    .prepare(
+      `SELECT * FROM candidates WHERE company_id = ?
+         AND (name LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\' OR title LIKE ? ESCAPE '\\' OR location LIKE ? ESCAPE '\\' OR skills LIKE ? ESCAPE '\\')
+         ORDER BY created_at DESC LIMIT 8`
+    )
+    .all(req.user.company_id, like, like, like, like, like)
+    .map(candidateRow);
+  const jobs = db
+    .prepare(
+      `SELECT * FROM jobs WHERE company_id = ?
+         AND (title LIKE ? ESCAPE '\\' OR location LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')
+         ORDER BY created_at DESC LIMIT 8`
+    )
+    .all(req.user.company_id, like, like, like)
+    .map(jobRow);
+  const applications = db
+    .prepare(
+      `SELECT a.*, c.name AS candidate_name, c.title AS candidate_title, j.title AS job_title
+         FROM applications a
+         LEFT JOIN candidates c ON c.id = a.candidate_id
+         LEFT JOIN jobs j ON j.id = a.job_id
+         WHERE (j.company_id = ? OR c.company_id = ?)
+           AND (c.name LIKE ? ESCAPE '\\' OR j.title LIKE ? ESCAPE '\\')
+         ORDER BY a.created_at DESC LIMIT 8`
+    )
+    .all(req.user.company_id, req.user.company_id, like, like);
+  res.json({
+    candidates: candidates.map(({ name, email, title, location, ...rest }) => ({ type: 'candidate', id: rest.id, name, email, title, location })),
+    jobs: jobs.map(({ title, location, type, status, ...rest }) => ({ type: 'job', id: rest.id, title, location, type, status })),
+    applications,
+  });
+});
+
 // ---------- Screening questions ----------
 
 function libraryItem(db, q, jobCount) {
@@ -365,7 +418,7 @@ app.get('/api/applications', requireAuth, (req, res) => {
   const db = getDb();
   const rows = db
     .prepare(
-      `SELECT a.*, j.company_id AS company_id, j.title AS job_title, c.name AS candidate_name, c.skills AS candidate_skills
+      `SELECT a.*, j.company_id AS company_id, j.title AS job_title, c.name AS candidate_name, c.title AS candidate_title, c.location AS candidate_location, c.skills AS candidate_skills, c.years_experience AS candidate_years
        FROM applications a
        JOIN jobs j ON j.id = a.job_id
        JOIN candidates c ON c.id = a.candidate_id
@@ -472,6 +525,81 @@ app.get('/api/public/privacy', (req, res) => {
   res.json({ notice: PRIVACY_NOTICE, policy_version: POLICY_VERSION });
 });
 
+app.get('/api/public/company', (req, res) => {
+  const company = getDefaultCompany(getDb());
+  if (!company) return res.status(404).json({ error: 'No company configured' });
+  res.json({
+    id: company.id,
+    name: company.name,
+    brand_color: company.brand_color || null,
+    logo_path: company.logo_path || null,
+    nav_color: company.nav_color || null,
+    accent_color: company.accent_color || null,
+  });
+});
+
+app.put('/api/company/brand', requireAuth, requireAdmin, (req, res) => {
+  const { brand_color } = req.body || {};
+  if (typeof brand_color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(brand_color)) {
+    return res.status(400).json({ error: 'brand_color must be a #RRGGBB hex value.' });
+  }
+  const db = getDb();
+  const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(req.user.company_id);
+  if (!company) return res.status(404).json({ error: 'Company not found' });
+  db.prepare('UPDATE companies SET brand_color = ? WHERE id = ?').run(brand_color, company.id);
+  logAudit({ user: req.user, db, action: 'company.brand', detail: `Brand color set to ${brand_color}` });
+  const updated = db.prepare('SELECT * FROM companies WHERE id = ?').get(company.id);
+  res.json({ company: updated });
+});
+
+app.put('/api/company/settings', requireAuth, requireAdmin, (req, res) => {
+  const { name, brand_color, nav_color, accent_color } = req.body || {};
+  const db = getDb();
+  const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(req.user.company_id);
+  if (!company) return res.status(404).json({ error: 'Company not found' });
+  const HEX = /^#[0-9a-fA-F]{6}$/;
+  const sets = [];
+  const vals = [];
+  const detail = [];
+  if (name !== undefined) {
+    const trimmed = typeof name === 'string' ? name.trim() : '';
+    if (!trimmed || trimmed.length > 120) {
+      return res.status(400).json({ error: 'Company name must be 1–120 characters.' });
+    }
+    sets.push('name = ?');
+    vals.push(trimmed);
+    detail.push('name');
+  }
+  const pushColor = (field, value, label) => {
+    if (value === undefined) return;
+    if (value === null) {
+      sets.push(`${field} = NULL`);
+      detail.push(label);
+      return;
+    }
+    if (typeof value !== 'string' || !HEX.test(value)) {
+      throw new Error(`${label} must be a #RRGGBB hex value.`);
+    }
+    sets.push(`${field} = ?`);
+    vals.push(value);
+    detail.push(label);
+  };
+  try {
+    pushColor('brand_color', brand_color, 'brand_color');
+    pushColor('nav_color', nav_color, 'nav_color');
+    pushColor('accent_color', accent_color, 'accent_color');
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+  if (sets.length === 0) {
+    return res.status(400).json({ error: 'Nothing to update — provide at least one setting.' });
+  }
+  vals.push(company.id);
+  db.prepare(`UPDATE companies SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+  logAudit({ user: req.user, db, action: 'company.update', detail: `Settings updated: ${detail.join(', ')}` });
+  res.json({ company: db.prepare('SELECT * FROM companies WHERE id = ?').get(company.id) });
+});
+
 app.post('/api/public/resume/parse', upload.single('resume'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded. Send the resume as a "resume" file field.' });
   try {
@@ -515,11 +643,283 @@ function storeResumeFile(file) {
   };
 }
 
+function storeLogoFile(file) {
+  const ext = String((file.originalname || '').split('.').pop() || '').toLowerCase();
+  const stored = `${crypto.randomUUID()}.${ext}`;
+  fs.writeFileSync(path.join(resolveUploadsDir(), stored), file.buffer);
+  return stored;
+}
+
+function deleteStoredFile(stored) {
+  if (!stored) return;
+  try {
+    fs.unlinkSync(path.join(resolveUploadsDir(), path.basename(stored)));
+  } catch { /* already gone */ }
+}
+
+app.get('/api/company/logo', (req, res) => {
+  const db = getDb();
+  const company = req.query.company
+    ? db.prepare('SELECT * FROM companies WHERE id = ?').get(req.query.company)
+    : getDefaultCompany(db);
+  if (!company || !company.logo_path) return res.status(404).json({ error: 'No company logo' });
+  const file = path.join(resolveUploadsDir(), path.basename(company.logo_path));
+  if (!fs.existsSync(file)) return res.status(404).json({ error: 'No company logo' });
+  res.setHeader('Cache-Control', 'public, max-age=60');
+  res.sendFile(file);
+});
+
+// Company branding lookup: let an admin find any company in the system and
+// adopt its logo + colors. Returns branding-neutral fields only.
+app.get('/api/companies/search', requireAuth, requireAdmin, (req, res) => {
+  const q = String(req.query.q || '').trim();
+  const db = getDb();
+  const like = q ? `%${q.replace(/[%_]/g, (m) => '\\' + m)}%` : '%';
+  const rows = q
+    ? db.prepare(`SELECT id, name, brand_color, nav_color, accent_color, logo_path FROM companies
+                   WHERE name LIKE ? ESCAPE '\\' AND id != ?
+                   ORDER BY name COLLATE NOCASE LIMIT 10`).all(like, req.user.company_id)
+    : db.prepare('SELECT id, name, brand_color, nav_color, accent_color, logo_path FROM companies WHERE id != ? ORDER BY name COLLATE NOCASE LIMIT 10').all(req.user.company_id);
+  res.json(rows.map((r) => ({ ...r, brand_color: r.brand_color || null, nav_color: r.nav_color || null, accent_color: r.accent_color || null, logo_path: r.logo_path || null })));
+});
+
+// ---------- external company lookup ("find any company") ----------
+
+async function fetchWithTimeout(url, ms = 6000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'TalentFlow/1.0 (company branding lookup)' } });
+    if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
+    return res;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+function extractLinkedInUrl(text) {
+  const m = String(text || '').match(/https?:\/\/(?:[\w-]+\.)*linkedin\.com\/company\/[A-Za-z0-9._%+-]+/);
+  return m ? m[0].replace(/[?&].*$/, '').replace(/[.,;:)]+$/, '') : null;
+}
+
+function collectUrls(node, out = []) {
+  if (!node || typeof node !== 'object') return out;
+  if (Array.isArray(node)) { node.forEach((n) => collectUrls(n, out)); return out; }
+  for (const key of ['Text', 'FirstURL', 'URL', 'AbstractURL']) {
+    if (typeof node[key] === 'string') {
+      const u = extractLinkedInUrl(node[key]);
+      if (u && !out.includes(u)) out.push(u);
+    }
+  }
+  collectUrls(node.Topics, out);
+  collectUrls(node.NestedResult, out);
+  collectUrls(node.Results, out);
+  return out;
+}
+
+// Resolve the official logo for a company via Wikidata's "logo image" property
+// (P154) — far more reliable than picking an arbitrary page image. Falls back
+// to the Wikipedia page image when no Wikidata logo exists.
+async function logoUrlFor(title) {
+  try {
+    const searchRes = await fetchWithTimeout(
+      `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(title)}&language=en&limit=1&format=json&type=item`,
+      4500
+    );
+    const searchData = await searchRes.json();
+    const item = searchData?.search?.[0];
+    if (item?.id) {
+      const entRes = await fetchWithTimeout(
+        `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${encodeURIComponent(item.id)}&props=claims&format=json`,
+        4500
+      );
+      const entData = await entRes.json();
+      const filename = entData?.entities?.[item.id]?.claims?.P154?.[0]?.mainsnak?.datavalue?.value;
+      if (typeof filename === 'string' && filename.trim()) {
+        return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(filename.trim())}?width=512`;
+      }
+    }
+  } catch { /* fall through to page image */ }
+  try {
+    const res = await fetchWithTimeout(
+      `https://en.wikipedia.org/w/api.php?action=query&prop=pageimages&format=json&redirects=1&titles=${encodeURIComponent(title)}`,
+      4500
+    );
+    const data = await res.json();
+    const page = Object.values(data?.query?.pages || {})[0];
+    return page?.original?.source || page?.thumbnail?.source || null;
+  } catch {
+    return null;
+  }
+}
+
+async function linkedInUrlFor(name) {
+  try {
+    const res = await fetchWithTimeout(
+      `https://api.duckduckgo.com/?q=${encodeURIComponent(`"${name}" linkedin company`)}&format=json&no_html=1&skip_disambig=1&t=talentflow`,
+      4500
+    );
+    const data = await res.json();
+    const urls = collectUrls(data);
+    return urls[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+// Search public companies by name and return candidates with their real logo,
+// plus a matching LinkedIn company page. Keyless, bot-friendly lookups only.
+app.get('/api/company/lookup', requireAuth, requireAdmin, async (req, res) => {
+  const q = String(req.query.q || '').trim();
+  if (!q) return res.status(400).json({ error: 'Provide a company name to search.' });
+  if (q.length > 120) return res.status(400).json({ error: 'Search query too long.' });
+  try {
+    const resOp = await fetchWithTimeout(
+      `https://en.wikipedia.org/w/api.php?action=opensearch&format=json&namespace=0&limit=5&search=${encodeURIComponent(q)}`,
+      5000
+    );
+    let titles = [];
+    try {
+      const opened = await resOp.json();
+      titles = Array.isArray(opened[1]) ? opened[1].slice(0, 5) : [];
+    } catch { /* non-JSON / rate-limited reply — treat as no candidates */ }
+    const candidates = [];
+    for (const title of titles) {
+      const entry = { name: title, logoUrl: null, linkedinUrl: null };
+      try { entry.logoUrl = await logoUrlFor(title); } catch { /* no logo */ }
+      if (candidates.length === 0) try { entry.linkedinUrl = await linkedInUrlFor(title); } catch { /* no linkedin */ }
+      candidates.push(entry);
+    }
+    res.json({ query: q, candidates });
+  } catch (e) {
+    res.status(502).json({ error: 'Could not reach the company directory. Try again in a moment.' });
+  }
+});
+
+// Adopt a looked-up company: copies the remote logo locally, derives a brand
+// color from it, and sets the org title + LinkedIn profile for a custom
+// light/dark theme that matches the adopted company.
+app.post('/api/company/adopt', requireAuth, requireAdmin, async (req, res) => {
+  const { name, logoUrl, linkedinUrl } = req.body || {};
+  const db = getDb();
+  const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(req.user.company_id);
+  if (!company) return res.status(404).json({ error: 'Company not found' });
+  const trimmed = typeof name === 'string' ? name.trim() : '';
+  if (!trimmed || trimmed.length > 120) {
+    return res.status(400).json({ error: 'Please provide the company name (1–120 characters).' });
+  }
+  if (!logoUrl || typeof logoUrl !== 'string') {
+    return res.status(422).json({ error: 'No logo found for this company, so branding cannot be adopted.' });
+  }
+
+  // All-or-nothing: fetch the logo, validate it, and derive the brand color
+  // BEFORE touching the database. If any step fails, nothing changes.
+  let stored = null;
+  let buf = null;
+  let derived = null;
+  try {
+    const ictrl = new AbortController();
+    const timer = setTimeout(() => ictrl.abort(), 9000);
+    let img;
+    let ct = '';
+    try {
+      img = await fetch(logoUrl, { signal: ictrl.signal, headers: { 'User-Agent': 'TalentFlow/1.0 (logo adopt)' } });
+      ct = String(img.headers.get('content-type') || '').toLowerCase();
+      buf = Buffer.from(await img.arrayBuffer());
+    } finally {
+      clearTimeout(timer);
+    }
+    const looksImage = ct.includes('image/') || buf[0] === 0x89 || buf.slice(0, 512).toString('latin1').includes('<svg');
+    if (!img.ok || buf.length === 0 || buf.length > 8 * 1024 * 1024 || !looksImage) {
+      return res.status(502).json({ error: "Could not download this company's logo. No changes were made." });
+    }
+    derived = sampleBrandColor(buf, ct);
+    if (!derived) {
+      return res.status(422).json({ error: "Could not determine a brand color from the logo. No changes were made." });
+    }
+    let ext = '.png';
+    if (ct.includes('svg') || buf.slice(0, 512).toString('latin1').includes('<svg')) ext = '.svg';
+    else if (ct.includes('jpeg') || ct.includes('jpg')) ext = '.jpg';
+    else if (ct.includes('webp')) ext = '.webp';
+    else if (ct.includes('gif')) ext = '.gif';
+    stored = `${crypto.randomUUID()}${ext}`;
+  } catch {
+    return res.status(502).json({ error: "Could not download this company's logo. No changes were made." });
+  }
+
+  // Every step succeeded — commit the full branding change atomically.
+  try {
+    fs.writeFileSync(path.join(getUploadsDir(), stored), buf);
+    const sets = ['name = ?', 'brand_color = ?'];
+    const vals = [trimmed, derived];
+    sets.push('logo_path = ?');
+    vals.push(stored);
+    deleteStoredFile(company.logo_path);
+    if (linkedinUrl !== undefined) {
+      sets.push('linkedin_url = ?');
+      vals.push(linkedinUrl ? String(linkedinUrl).trim().slice(0, 300) : null);
+    }
+    vals.push(company.id);
+    db.prepare(`UPDATE companies SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+  } catch {
+    deleteStoredFile(stored);
+    return res.status(502).json({ error: 'Something went wrong while applying the branding. No changes were made.' });
+  }
+  logAudit({ user: req.user, db, action: 'company.adopt', detail: `Branding adopted from "${trimmed}" (logo + color)` });
+  res.json({ company: db.prepare('SELECT * FROM companies WHERE id = ?').get(company.id) });
+});
+
+app.put('/api/company/logo', requireAuth, requireAdmin, uploadLogo.single('logo'), (req, res) => {
+  const db = getDb();
+  const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(req.user.company_id);
+  if (!company) return res.status(404).json({ error: 'Company not found' });
+  if (!req.file || !req.file.buffer || req.file.buffer.length === 0) {
+    return res.status(400).json({ error: 'No image uploaded. Send the logo as a "logo" file field.' });
+  }
+  const stored = storeLogoFile(req.file);
+  deleteStoredFile(company.logo_path);
+  db.prepare('UPDATE companies SET logo_path = ? WHERE id = ?').run(stored, company.id);
+  logAudit({ user: req.user, db, action: 'company.logo', detail: 'Company logo updated' });
+  res.json({ company: db.prepare('SELECT * FROM companies WHERE id = ?').get(company.id) });
+});
+
+app.delete('/api/company/logo', requireAuth, requireAdmin, (req, res) => {
+  const db = getDb();
+  const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(req.user.company_id);
+  if (!company) return res.status(404).json({ error: 'Company not found' });
+  deleteStoredFile(company.logo_path);
+  db.prepare('UPDATE companies SET logo_path = NULL WHERE id = ?').run(company.id);
+  logAudit({ user: req.user, db, action: 'company.logo', detail: 'Company logo removed' });
+  res.json({ company: db.prepare('SELECT * FROM companies WHERE id = ?').get(company.id) });
+});
+
+// Adopt another company's logo (branding copy). Copies the source's stored
+// file under a fresh name so the current org owns its logo going forward.
+app.post('/api/company/logo/import', requireAuth, requireAdmin, (req, res) => {
+  const db = getDb();
+  const { company_id } = req.body || {};
+  const source = company_id ? db.prepare('SELECT * FROM companies WHERE id = ?').get(company_id) : null;
+  if (!source) return res.status(404).json({ error: 'Source company not found' });
+  if (!source.logo_path) return res.status(400).json({ error: 'That company has no logo to import.' });
+  const srcFile = path.join(resolveUploadsDir(), path.basename(source.logo_path));
+  if (!fs.existsSync(srcFile)) return res.status(400).json({ error: 'That company has no logo to import.' });
+  const ext = path.extname(srcFile).toLowerCase();
+  const stored = `${crypto.randomUUID()}${ext}`;
+  fs.copyFileSync(srcFile, path.join(resolveUploadsDir(), stored));
+  const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(req.user.company_id);
+  deleteStoredFile(company.logo_path);
+  db.prepare('UPDATE companies SET logo_path = ? WHERE id = ?').run(stored, company.id);
+  logAudit({ user: req.user, db, action: 'company.logo', detail: `Branding logo imported from company #${source.id}` });
+  res.json({ company: db.prepare('SELECT * FROM companies WHERE id = ?').get(company.id) });
+});
+
 app.post('/api/public/applications', upload.single('resume'), async (req, res) => {
   const db = getDb();
   const body = req.body || {};
   const { job_id, name, email, phone, location, summary, years_experience } = body;
   const skills = Array.isArray(body.skills) ? body.skills : (safeJson(body.skills) || []);
+  const education = Array.isArray(body.education) ? body.education : (safeJson(body.education) || []);
+  const experience = Array.isArray(body.experience) ? body.experience : (safeJson(body.experience) || []);
   const questionnaire = sanitizedAnswers(safeJson(body.questionnaire) || body.questionnaire);
   if (!job_id || !name || !email) return res.status(400).json({ error: 'name, email and job_id are required' });
   if (body.consent !== 'true' && body.consent !== true) {
@@ -569,12 +969,13 @@ app.post('/api/public/applications', upload.single('resume'), async (req, res) =
   } else {
     const info = db
       .prepare(
-        `INSERT INTO candidates (company_id, name, email, phone, location, title, summary, years_experience, skills, resume_text, resume_filename, resume_path)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO candidates (company_id, name, email, phone, location, title, summary, years_experience, skills, education, experience, resume_text, resume_filename, resume_path)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         company.id, name, email, phone || null, location || null, job.title || null,
-        summary || null, Number(years_experience) || 0, JSON.stringify(skills || []) ,
+        summary || null, Number(years_experience) || 0, JSON.stringify(skills || []),
+        JSON.stringify(education || []), JSON.stringify(experience || []),
         resume.resume_text, resume.resume_filename, resume.resume_path
       );
     candidateId = info.lastInsertRowid;
@@ -753,6 +1154,9 @@ app.use((err, req, res, next) => {
     return res.status(400).json({ error });
   }
   if (err && err.message === 'Unsupported file type. Use .pdf, .docx, or .txt') {
+    return res.status(415).json({ error: err.message });
+  }
+  if (err && err.message.startsWith('Unsupported logo type.')) {
     return res.status(415).json({ error: err.message });
   }
   next(err);

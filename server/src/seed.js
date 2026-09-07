@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import fs from 'fs';
 import { createDb } from './db.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -13,14 +14,42 @@ let companyId;
 if (company) {
   companyId = company.id;
 } else {
-  companyId = db.prepare('INSERT INTO companies (name) VALUES (?)').run('Acme Talent Co').lastInsertRowid;
+  companyId = db.prepare('INSERT INTO companies (name, brand_color) VALUES (?, ?)').run('Acme Talent Co', '#0d9488').lastInsertRowid;
+}
+
+// Companion demo company with distinct branding, so the "adopt a company's
+// branding" feature (search → logo + nav/accent colors) has something to find.
+const styleCo = db.prepare('SELECT * FROM companies WHERE name = ?').get('Northwind Studio');
+if (!styleCo) {
+  const logoName = 'northwind-logo.svg';
+  const styleId = db.prepare(
+    'INSERT INTO companies (name, brand_color, nav_color, accent_color, logo_path) VALUES (?, ?, ?, ?, ?)'
+  ).run('Northwind Studio', '#ea580c', '#1c1917', '#f59e0b', logoName).lastInsertRowid;
+  const bg = db.prepare('INSERT INTO users (company_id, name, email, password_hash, role) VALUES (?, ?, ?, ?, ?)');
+  const hasUser = db.prepare('SELECT COUNT(*) AS n FROM users WHERE company_id = ?').get(styleId).n;
+  if (!hasUser) {
+    bg.run(styleId, 'Northwind Admin', 'admin@northwind.demo', bcrypt.hashSync('password', 10), 'admin');
+  }
+  const savePath = path.join(process.env.UPLOADS_DIR || path.join(__dirname, '..', 'data', 'uploads'), logoName);
+  fs.mkdirSync(path.dirname(savePath), { recursive: true });
+  fs.writeFileSync(
+    savePath,
+    `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+      <rect width="64" height="64" rx="14" fill="#ea580c"/>
+      <path d="M18 44V20l14 12 14-12v24" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`
+  );
 }
 
 const userCount = db.prepare('SELECT COUNT(*) AS n FROM users').get().n;
 if (userCount === 0) {
   db.prepare('INSERT INTO users (company_id, name, email, password_hash, role) VALUES (?, ?, ?, ?, ?)').run(
-    companyId, 'Demo Recruiter', 'demo@acmetalent.com', bcrypt.hashSync('password', 10), 'recruiter'
+    companyId, 'Demo Recruiter', 'demo@acmetalent.com', bcrypt.hashSync('password', 10), 'admin'
   );
+} else {
+  // The seeded demo account owns the instance: keep it elevated so it can
+  // manage company branding/identity on upgraded installs.
+  db.prepare(`UPDATE users SET role = 'admin' WHERE email = 'demo@acmetalent.com'`).run();
 }
 
 const candCount = db.prepare('SELECT COUNT(*) AS n FROM candidates').get().n;
@@ -250,10 +279,10 @@ if (appCount === 0) {
     });
   }
 }
+}
 
-if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === `file://${path.resolve(process.argv[1])}`) {
   seed();
   console.log('Seed complete.');
   console.log('Login: demo@acmetalent.com / password');
-}
 }

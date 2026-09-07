@@ -658,10 +658,6 @@ table.data tbody tr:hover td { background: var(--surface-2); }
   background: #fff; border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 40;
 }
 .portal-brand { display: flex; align-items: center; gap: 10px; font-weight: 750; font-size: 16px; color: var(--text); }
-.portal-brand .pmark {
-  width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; color: #fff;
-  background: linear-gradient(135deg, #6366f1, #4f46e5);
-}
 .portal-top .tag { margin-left: auto; }
 .portal-link { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-weight: 600; font-size: 13.5px; background: none; border: none; cursor: pointer; font: inherit; }
 .portal-link:hover { color: var(--primary); }

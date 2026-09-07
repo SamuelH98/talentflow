@@ -20,6 +20,9 @@ function ensureUploadsDir() {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
+export function getUploadsDir() {
+  return ensureUploadsDir();
+}
 
 // Legacy static alias (module-load-time) for code that uses it at import time.
 export const uploadsDir = defaultUploadsDir;
@@ -38,6 +41,10 @@ export function createDb(dbFile) {
     CREATE TABLE IF NOT EXISTS companies (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
+      brand_color TEXT,
+      logo_path TEXT,
+      nav_color TEXT,
+      accent_color TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -149,6 +156,23 @@ export function createDb(dbFile) {
     CREATE INDEX IF NOT EXISTS idx_screening_company ON screening_questions(company_id);
     CREATE INDEX IF NOT EXISTS idx_job_screening_job ON job_screening_questions(job_id);
   `);
+
+  const companyCols = db.prepare(`PRAGMA table_info(companies)`).all().map((c) => c.name);
+  if (!companyCols.includes('brand_color')) {
+    db.exec(`ALTER TABLE companies ADD COLUMN brand_color TEXT`);
+  }
+  if (!companyCols.includes('logo_path')) {
+    db.exec(`ALTER TABLE companies ADD COLUMN logo_path TEXT`);
+  }
+  if (!companyCols.includes('nav_color')) {
+    db.exec(`ALTER TABLE companies ADD COLUMN nav_color TEXT`);
+  }
+  if (!companyCols.includes('accent_color')) {
+    db.exec(`ALTER TABLE companies ADD COLUMN accent_color TEXT`);
+  }
+  if (!companyCols.includes('linkedin_url')) {
+    db.exec(`ALTER TABLE companies ADD COLUMN linkedin_url TEXT`);
+  }
 
   const candCols = db.prepare(`PRAGMA table_info(candidates)`).all().map((c) => c.name);
   if (!candCols.includes('resume_filename')) {
