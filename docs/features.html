@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="TalentFlow — ATS feature matrix and open-source positioning." />
+  <title>Feature Matrix — TalentFlow</title>
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+  <link rel="stylesheet" href="assets/site.css" />
+</head>
+<body>
+  <nav class="topnav">
+    <div class="topnav-inner">
+      <a class="brand" href="index.html"><img src="assets/logo.svg" alt="TalentFlow logo" /> TalentFlow</a>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="guide.html">Guide</a>
+        <a href="features.html" class="active">Features</a>
+        <a href="api.html">API</a>
+        <a href="deploy.html">Deploy</a>
+      </div>
+      <div class="nav-github"><a href="https://github.com/SamuelH98/talentflow" target="_blank" rel="noopener">GitHub</a></div>
+    </div>
+  </nav>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <ul>
+        <li class="group">Guide</li>
+        <li><a href="guide.html">Introduction &amp; Setup</a></li>
+        <li><a href="recruiter.html">The Recruiter App</a></li>
+        <li><a href="portal.html">Candidate Portal</a></li>
+        <li><a href="scoring.html">Scoring Model</a></li>
+        <li class="group">Reference</li>
+        <li><a href="features.html" class="active">Feature Matrix</a></li>
+        <li><a href="api.html">API Reference</a></li>
+        <li><a href="deploy.html">Deployment</a></li>
+        <li><a href="contributing.html">Contributing</a></li>
+      </ul>
+    </aside>
+
+    <article>
+      <h1>Feature Matrix</h1>
+      <p class="lede">What TalentFlow ships today versus the feature set a modern ATS is expected to cover. ✅ shipped · 🔨 in progress · 🛣️ on the roadmap · ⛔ deliberately out of scope</p>
+
+      <table>
+        <thead><tr><th>Capability</th><th>Typical ATS</th><th>TalentFlow</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Job / requisition management</strong></td><td>required</td><td>✅</td><td>Jobs, departments, salary band, requirements, open/closed</td></tr>
+          <tr><td><strong>Candidate database</strong> (search, source, pool)</td><td>required</td><td>✅ (partial)</td><td>Full CRUD + resume text stored; search/dedupe are roadmap</td></tr>
+          <tr><td><strong>Pipeline / kanban</strong></td><td>required</td><td>✅</td><td>5-stage Projects board (matched → review → interview → hired/rejected)</td></tr>
+          <tr><td><strong>Automatic resume parsing</strong></td><td>required</td><td>✅</td><td><code>.pdf</code> / <code>.docx</code> / <code>.txt</code>, 5 MB cap, auto-fills contact + skills + summary (local, no cloud)</td></tr>
+          <tr><td><strong>EEO / self-identification</strong></td><td>required</td><td>✅</td><td>Workday-style, disclosure per question, stored but never shown in pipeline views</td></tr>
+          <tr><td><strong>Candidate consent + privacy</strong></td><td>required</td><td>✅</td><td>Consent with timestamp + policy version on every application; non-consenting rejected</td></tr>
+          <tr><td><strong>Right-to-erasure (DSAR)</strong></td><td>required</td><td>✅</td><td>Export a portable JSON copy and request full erasure, gated by a proof token</td></tr>
+          <tr><td><strong>Audit log</strong></td><td>required</td><td>✅</td><td>Company-scoped recruiter action log (sign-ins, changes, stage changes, erasures)</td></tr>
+          <tr><td><strong>Role-based access + multiple users</strong></td><td>expected</td><td>🛣️</td><td>Single recruiter role today; multi-user + roles are roadmap</td></tr>
+          <tr><td><strong>Candidate communications / templates</strong></td><td>expected</td><td>🛣️</td><td>Not yet</td></tr>
+          <tr><td><strong>Interview scheduling + scorecards</strong></td><td>expected</td><td>🛣️</td><td>Not yet</td></tr>
+          <tr><td><strong>Analytics</strong></td><td>expected</td><td>🛣️</td><td>Data model supports it; dashboards planned</td></tr>
+          <tr><td><strong>Explainable AI scoring</strong></td><td>2026 differentiator</td><td>✅</td><td>Transparent skill/experience/years breakdown on every match; no hidden black box</td></tr>
+          <tr><td><strong>Talent-pool rediscovery</strong></td><td>2026 differentiator</td><td>✅</td><td><code>GET /api/jobs/:id/matches</code> re-scores the whole pool against any job</td></tr>
+          <tr><td><strong>Automated candidate follow-up</strong></td><td>nice-to-have</td><td>🛣️</td><td>Roadmap only</td></tr>
+          <tr><td><strong>Multi-language / i18n</strong></td><td>nice-to-have</td><td>🛣️</td><td>Roadmap only</td></tr>
+          <tr><td><strong>Cloud sync</strong></td><td>—</td><td>⛔</td><td>By design — talent data stays on your machine</td></tr>
+          <tr><td><strong>External AI API dependency</strong></td><td>—</td><td>⛔</td><td>Scoring is fully local and offline-capable</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Positioning vs. open-source peers</h2>
+      <table>
+        <thead><tr><th></th><th>OpenCATS</th><th>Reqcore</th><th>Vellum</th><th><strong>TalentFlow</strong></th></tr></thead>
+        <tbody>
+          <tr><td><strong>Stack</strong></td><td>PHP (dated)</td><td>Nuxt + Postgres</td><td>Next.js + Prisma + Postgres</td><td>Node + Express + <strong>SQLite</strong></td></tr>
+          <tr><td><strong>Deploy cost</strong></td><td>heavy</td><td>requires Postgres</td><td>requires Postgres</td><td><strong>zero-config: <code>npm run dev</code>, one file DB</strong></td></tr>
+          <tr><td><strong>Candidate portal out of the box</strong></td><td>weak</td><td>partial</td><td>partial</td><td>✅ built-in shareable careers page + status tracking</td></tr>
+          <tr><td><strong>License</strong></td><td>AGPL</td><td>AGPL</td><td>AGPL</td><td>AGPL (this repo)</td></tr>
+          <tr><td><strong>Local-first / offline</strong></td><td>—</td><td>—</td><td>—</td><td>✅ no external services at all</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout"><strong>The differentiator:</strong> TalentFlow runs in under a minute with no database server and no cloud account, yet covers the attestation-heavy candidate journey (EEO, consent, resume parsing, transparent scoring) that modern buyers expect.</div>
+    </article>
+  </div>
+
+  <footer class="footer">
+    Released under the AGPL-3.0 License · &copy; 2026 SamuelH98 ·
+    <a href="https://github.com/SamuelH98/talentflow" target="_blank" rel="noopener">github.com/SamuelH98/talentflow</a>
+  </footer>
+</body>
+</html>

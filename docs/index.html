@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="TalentFlow — a local-first, LinkedIn Recruiter-style hiring tool with transparent candidate scoring and a public candidate portal." />
+  <title>TalentFlow — Local-first hiring tool</title>
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+  <link rel="stylesheet" href="assets/site.css" />
+</head>
+<body>
+  <nav class="topnav">
+    <div class="topnav-inner">
+      <a class="brand" href="index.html">
+        <img src="assets/logo.svg" alt="TalentFlow logo" />
+        TalentFlow
+      </a>
+      <div class="nav-links">
+        <a href="index.html" class="active">Home</a>
+        <a href="guide.html">Guide</a>
+        <a href="features.html">Features</a>
+        <a href="api.html">API</a>
+        <a href="deploy.html">Deploy</a>
+      </div>
+      <div class="nav-github"><a href="https://github.com/SamuelH98/talentflow" target="_blank" rel="noopener">GitHub</a></div>
+    </div>
+  </nav>
+
+  <section class="hero">
+    <div class="hero-inner">
+      <img class="hero-logo" src="assets/logo.svg" alt="TalentFlow" />
+      <h1>TalentFlow — <span class="grad">local-first hiring</span> done right</h1>
+      <p class="tagline">
+        A LinkedIn Recruiter-style ATS that scores and ranks the best candidates for each role automatically —
+        zero-config, no cloud account, no external AI API, fully offline-capable.
+      </p>
+      <div class="hero-actions">
+        <a class="btn brand" href="guide.html">Getting Started</a>
+        <a class="btn alt" href="https://github.com/SamuelH98/talentflow" target="_blank" rel="noopener">View on GitHub</a>
+      </div>
+    </div>
+  </section>
+
+  <div class="layout">
+    <div class="grid" style="grid-column: 1 / -1">
+      <div class="card"><div class="icon">🎯</div><h3>Transparent candidate ranking</h3><p>Every candidate is scored against every job with a visible breakdown — skills, experience fit, and years — no hidden black box.</p></div>
+      <div class="card"><div class="icon">📊</div><h3>Projects pipeline</h3><p>A 5-stage kanban (candidates → reached out → interviewing → hired / rejected) that mirrors LinkedIn Recruiter.</p></div>
+      <div class="card"><div class="icon">🧾</div><h3>Public candidate portal</h3><p>A shareable, no-login careers page: one-click apply, resume auto-fill, EEO self-ID, and private status tracking links.</p></div>
+      <div class="card"><div class="icon">🔒</div><h3>Privacy &amp; consent built in</h3><p>Explicit consent, right-to-erasure (DSAR), a company-scoped audit log, and everything stays on your machine.</p></div>
+      <div class="card"><div class="icon">🏛️</div><h3>Explainable AI, on-prem</h3><p>Scoring is fully local and offline-capable. No cloud account, no database server, no external AI API.</p></div>
+      <div class="card"><div class="icon">⚡</div><h3>Zero-config startup</h3><p>One SQLite file. <code>npm run dev</code> and you're hiring — runs in under a minute.</p></div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    Released under the AGPL-3.0 License · &copy; 2026 SamuelH98 ·
+    <a href="https://github.com/SamuelH98/talentflow" target="_blank" rel="noopener">github.com/SamuelH98/talentflow</a>
+  </footer>
+</body>
+</html>

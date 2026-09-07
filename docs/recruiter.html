@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="TalentFlow — the LinkedIn Recruiter-style recruiter app." />
+  <title>The Recruiter App — TalentFlow</title>
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+  <link rel="stylesheet" href="assets/site.css" />
+</head>
+<body>
+  <nav class="topnav">
+    <div class="topnav-inner">
+      <a class="brand" href="index.html"><img src="assets/logo.svg" alt="TalentFlow logo" /> TalentFlow</a>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="guide.html" class="active">Guide</a>
+        <a href="features.html">Features</a>
+        <a href="api.html">API</a>
+        <a href="deploy.html">Deploy</a>
+      </div>
+      <div class="nav-github"><a href="https://github.com/SamuelH98/talentflow" target="_blank" rel="noopener">GitHub</a></div>
+    </div>
+  </nav>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <ul>
+        <li class="group">Guide</li>
+        <li><a href="guide.html">Introduction &amp; Setup</a></li>
+        <li><a href="recruiter.html" class="active">The Recruiter App</a></li>
+        <li><a href="portal.html">Candidate Portal</a></li>
+        <li><a href="scoring.html">Scoring Model</a></li>
+        <li class="group">Reference</li>
+        <li><a href="features.html">Feature Matrix</a></li>
+        <li><a href="api.html">API Reference</a></li>
+        <li><a href="deploy.html">Deployment</a></li>
+        <li><a href="contributing.html">Contributing</a></li>
+      </ul>
+    </aside>
+
+    <article>
+      <h1>The Recruiter App</h1>
+      <p class="lede">The recruiter UI is designed to feel and behave like <strong>LinkedIn Recruiter</strong> — reworking the classic flat screens into Recruiter-style flows while keeping all matching, screening, and branding data intact.</p>
+
+      <h2>App shell &amp; navigation</h2>
+      <ul>
+        <li><strong>Top bar</strong> — company logo (with a frosted-glass backdrop), the wordmark "Recruiter", a global search, a link to the candidate portal, the current recruiter, org settings (admin only), a dark-mode toggle, and log out.</li>
+        <li><strong>Icon rail</strong> (desktop) — a narrow 76px left rail: <strong>Home</strong>, <strong>Candidates</strong>, <strong>My Jobs</strong>, <strong>Projects</strong>, then a spacer and the tools group (<strong>Screening</strong> and <strong>Activity log</strong>).</li>
+        <li><strong>Mobile</strong> — the rail collapses into a drawer.</li>
+      </ul>
+
+      <h2>Candidates search</h2>
+      <p>A filter panel (Keywords, Job title, Location, Must-have skills, Min/Max years, Status) plus result rows showing avatar, name, headline, location·years, skill pills, and actions (Open profile / Edit / Archive–Reactivate). Archiving replaces delete in the search UI.</p>
+
+      <h2>Candidate profile</h2>
+      <p>Clicking a candidate opens a <strong>right slide-in drawer</strong>:</p>
+      <ul>
+        <li>A header card with avatar, name, title, location/contact, experience, and a stage chip.</li>
+        <li><strong>Add to project</strong> opens a dialog listing open jobs.</li>
+        <li><strong>Edit</strong> and <strong>Archive</strong> actions.</li>
+        <li>Tabs for <strong>About</strong>, <strong>Applications</strong>, and <strong>Notes</strong>.</li>
+        <li>Each application row has a <strong>stage menu</strong> (pipeline stages) and a notes editor.</li>
+      </ul>
+
+      <h2>My Jobs</h2>
+      <p>A list of jobs with status chips (All / Open / Closed), each row showing its pipeline stage counts and actions: <strong>Pipeline</strong>, <strong>Find candidates</strong>, <strong>Questions</strong>, <strong>Edit</strong>, and <strong>Delete</strong>. Selecting a job opens a detail drawer; "Pipeline" deep-links to <code>#/projects?job=&lt;id&gt;</code>.</p>
+
+      <h2>Projects pipeline</h2>
+      <p>The <strong>Projects</strong> view is a kanban board with five stages mapped onto the existing <code>applications.status</code> values — <strong>no schema changes needed</strong>:</p>
+      <table>
+        <thead><tr><th>Column</th><th>status</th></tr></thead>
+        <tbody>
+          <tr><td>Candidates</td><td><code>matched</code></td></tr>
+          <tr><td>Reached out</td><td><code>in_review</code></td></tr>
+          <tr><td>Interviewing</td><td><code>interview</code></td></tr>
+          <tr><td>Hired</td><td><code>hired</code></td></tr>
+          <tr><td>Rejected</td><td><code>rejected</code></td></tr>
+        </tbody>
+      </table>
+      <p>A job selector on the left filters the board. Cards show candidate name, title, and location, with <strong>move-left / move-right</strong> chevrons that call <code>updateApplicationStatus</code>. Clicking a card opens the candidate profile. Columns are fluid (<code>flex: 1 1 0</code>, <code>minWidth: 185</code>, <code>maxWidth: 264</code>, <code>overflowX: auto</code>) to avoid stray scrollbars.</p>
+
+      <h2>Branding &amp; themes</h2>
+      <ul>
+        <li>Adopt a company in <strong>Organization settings</strong> (admin only): the app fetches the real logo from the web, derives a brand color, sets the org title, and builds a custom light &amp; dark theme around it. Adoption is <strong>all-or-nothing</strong> — if the logo can't be downloaded or a color can't be derived, nothing changes.</li>
+        <li><strong>Dark mode is neutral gray</strong> (not blue) by default.</li>
+        <li>Nav, accent, and KPI colors derive from the brand color client-side.</li>
+      </ul>
+
+      <div class="callout"><strong>Note:</strong> the search dropdown renders as a plain rectangle, and the top-bar logo is shown as a raw image with a frosted-glass band behind a square-ish "Recruiter" wordmark — even swaps between companies with different logo aspect ratios keep the same footprint.</div>
+    </article>
+  </div>
+
+  <footer class="footer">
+    Released under the AGPL-3.0 License · &copy; 2026 SamuelH98 ·
+    <a href="https://github.com/SamuelH98/talentflow" target="_blank" rel="noopener">github.com/SamuelH98/talentflow</a>
+  </footer>
+</body>
+</html>

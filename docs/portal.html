@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="TalentFlow — the public candidate portal." />
+  <title>Candidate Portal — TalentFlow</title>
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+  <link rel="stylesheet" href="assets/site.css" />
+</head>
+<body>
+  <nav class="topnav">
+    <div class="topnav-inner">
+      <a class="brand" href="index.html"><img src="assets/logo.svg" alt="TalentFlow logo" /> TalentFlow</a>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="guide.html" class="active">Guide</a>
+        <a href="features.html">Features</a>
+        <a href="api.html">API</a>
+        <a href="deploy.html">Deploy</a>
+      </div>
+      <div class="nav-github"><a href="https://github.com/SamuelH98/talentflow" target="_blank" rel="noopener">GitHub</a></div>
+    </div>
+  </nav>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <ul>
+        <li class="group">Guide</li>
+        <li><a href="guide.html">Introduction &amp; Setup</a></li>
+        <li><a href="recruiter.html">The Recruiter App</a></li>
+        <li><a href="portal.html" class="active">Candidate Portal</a></li>
+        <li><a href="scoring.html">Scoring Model</a></li>
+        <li class="group">Reference</li>
+        <li><a href="features.html">Feature Matrix</a></li>
+        <li><a href="api.html">API Reference</a></li>
+        <li><a href="deploy.html">Deployment</a></li>
+        <li><a href="contributing.html">Contributing</a></li>
+      </ul>
+    </aside>
+
+    <article>
+      <h1>Candidate Portal</h1>
+      <p class="lede">A shareable, no-login careers page bundled with the recruiter app. Candidates browse open roles, apply in under a minute, and track their applications with a private link.</p>
+
+      <h2>What candidates can do</h2>
+      <ul>
+        <li><strong>Browse open roles</strong> at <code>#/portal</code></li>
+        <li><strong>One-click apply</strong> — details, screening questions, and EEO self-identification</li>
+        <li><strong>Resume auto-fill</strong> — upload a <code>.pdf</code>, <code>.docx</code>, or <code>.txt</code>; contact, skills, and summary are extracted locally (best-effort)</li>
+        <li><strong>Status tracking</strong> — a private link (<code>#/portal/status/&lt;token&gt;</code>) shows where the application sits in the pipeline</li>
+        <li><strong>Manage my data</strong> — export a portable JSON copy (plus resume) with a proof token, or request full <strong>erasure</strong> (DSAR)</li>
+      </ul>
+
+      <h2>Consent &amp; privacy</h2>
+      <ul>
+        <li>Applications record <strong>explicit consent</strong> with a timestamp and policy version; non-consenting applications are rejected (422).</li>
+        <li>EEO / self-identification answers (Workday/OFCCP-style, with per-question disclosure) are stored for compliance but are <strong>never shown</strong> in any recruiter pipeline view.</li>
+        <li>Screening answers are shown to recruiters (labelled with the question) and are <strong>not</strong> shown to other candidates.</li>
+      </ul>
+
+      <h2>What candidates cannot see</h2>
+      <ul>
+        <li>Match scores are never exposed — the portal shows <strong>stage status only</strong>.</li>
+        <li>Internal company fields and recruiter application details are stripped from the public job routes.</li>
+      </ul>
+
+      <h2>Under the hood (public routes)</h2>
+      <p>See the <a href="api.html">API reference</a> for the full list of unauthenticated <code>/api/public/*</code> endpoints — jobs, company brand, resume parse, applications, privacy, export, and erasure.</p>
+    </article>
+  </div>
+
+  <footer class="footer">
+    Released under the AGPL-3.0 License · &copy; 2026 SamuelH98 ·
+    <a href="https://github.com/SamuelH98/talentflow" target="_blank" rel="noopener">github.com/SamuelH98/talentflow</a>
+  </footer>
+</body>
+</html>

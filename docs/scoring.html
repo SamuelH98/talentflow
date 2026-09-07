@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="TalentFlow — the transparent scoring model." />
+  <title>Scoring Model — TalentFlow</title>
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+  <link rel="stylesheet" href="assets/site.css" />
+</head>
+<body>
+  <nav class="topnav">
+    <div class="topnav-inner">
+      <a class="brand" href="index.html"><img src="assets/logo.svg" alt="TalentFlow logo" /> TalentFlow</a>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="guide.html" class="active">Guide</a>
+        <a href="features.html">Features</a>
+        <a href="api.html">API</a>
+        <a href="deploy.html">Deploy</a>
+      </div>
+      <div class="nav-github"><a href="https://github.com/SamuelH98/talentflow" target="_blank" rel="noopener">GitHub</a></div>
+    </div>
+  </nav>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <ul>
+        <li class="group">Guide</li>
+        <li><a href="guide.html">Introduction &amp; Setup</a></li>
+        <li><a href="recruiter.html">The Recruiter App</a></li>
+        <li><a href="portal.html">Candidate Portal</a></li>
+        <li><a href="scoring.html" class="active">Scoring Model</a></li>
+        <li class="group">Reference</li>
+        <li><a href="features.html">Feature Matrix</a></li>
+        <li><a href="api.html">API Reference</a></li>
+        <li><a href="deploy.html">Deployment</a></li>
+        <li><a href="contributing.html">Contributing</a></li>
+      </ul>
+    </aside>
+
+    <article>
+      <h1>Scoring Model</h1>
+      <p class="lede">For each (job, candidate) pair, TalentFlow computes a 0–100 score. The breakdown is fully transparent — you can see exactly why any candidate ranked where they did.</p>
+
+      <table>
+        <thead><tr><th>Component</th><th>Weight</th><th>What it measures</th></tr></thead>
+        <tbody>
+          <tr><td>Skill match</td><td>50%</td><td>Overlap between job required skills and candidate skills (with synonyms, e.g. JS ↔ JavaScript ↔ Node)</td></tr>
+          <tr><td>Experience fit</td><td>30%</td><td>How well the candidate's summary / experience / resume text matches the job's requirement phrases</td></tr>
+          <tr><td>Years required</td><td>20%</td><td>Candidate years relative to the job's required years (capped at 100%)</td></tr>
+        </tbody>
+      </table>
+
+      <p>Scores are computed <strong>locally</strong> by <code>server/src/matching.js</code> — no external AI API.</p>
+
+      <h2>Why explainable scoring matters</h2>
+      <p>The differentiator is a <strong>human-in-the-loop</strong>, explainable approach: every match exposes its component scores, so a recruiter can audit the ranking instead of trusting a black box.</p>
+
+      <h2>Talent-pool rediscovery</h2>
+      <p>The whole candidate pool is re-scored against any job on demand via <code>GET /api/jobs/:id/matches</code> — re-rank past applicants against a newly opened role at any time.</p>
+    </article>
+  </div>
+
+  <footer class="footer">
+    Released under the AGPL-3.0 License · &copy; 2026 SamuelH98 ·
+    <a href="https://github.com/SamuelH98/talentflow" target="_blank" rel="noopener">github.com/SamuelH98/talentflow</a>
+  </footer>
+</body>
+</html>

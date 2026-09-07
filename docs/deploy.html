@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="TalentFlow — deployment guide." />
+  <title>Deployment — TalentFlow</title>
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+  <link rel="stylesheet" href="assets/site.css" />
+</head>
+<body>
+  <nav class="topnav">
+    <div class="topnav-inner">
+      <a class="brand" href="index.html"><img src="assets/logo.svg" alt="TalentFlow logo" /> TalentFlow</a>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="guide.html">Guide</a>
+        <a href="features.html">Features</a>
+        <a href="api.html">API</a>
+        <a href="deploy.html" class="active">Deploy</a>
+      </div>
+      <div class="nav-github"><a href="https://github.com/SamuelH98/talentflow" target="_blank" rel="noopener">GitHub</a></div>
+    </div>
+  </nav>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <ul>
+        <li class="group">Guide</li>
+        <li><a href="guide.html">Introduction &amp; Setup</a></li>
+        <li><a href="recruiter.html">The Recruiter App</a></li>
+        <li><a href="portal.html">Candidate Portal</a></li>
+        <li><a href="scoring.html">Scoring Model</a></li>
+        <li class="group">Reference</li>
+        <li><a href="features.html">Feature Matrix</a></li>
+        <li><a href="api.html">API Reference</a></li>
+        <li><a href="deploy.html" class="active">Deployment</a></li>
+        <li><a href="contributing.html">Contributing</a></li>
+      </ul>
+    </aside>
+
+    <article>
+      <h1>Deployment</h1>
+      <p class="lede">Single-file, zero-config, no cloud. The app runs locally or behind Docker with one port.</p>
+
+      <h2>Production mode (single origin)</h2>
+      <p><code>cd server &amp;&amp; npm run start:prod</code> builds the client and serves <strong>everything</strong> — the API and the React app, SPA routing included — from one Express server on <code>:4000</code>. No separate web server or CORS needed.</p>
+
+      <h2>Environment variables</h2>
+      <p>All optional:</p>
+      <table>
+        <thead><tr><th>Variable</th><th>Default</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>PORT</code></td><td><code>4000</code></td><td>HTTP port</td></tr>
+          <tr><td><code>DB_PATH</code></td><td><code>server/data/talentflow.db</code></td><td>SQLite database file location</td></tr>
+          <tr><td><code>UPLOADS_DIR</code></td><td><code>server/data/uploads</code></td><td>Where uploaded resumes are stored</td></tr>
+          <tr><td><code>JWT_SECRET</code></td><td>dev-only fallback</td><td>Signing key for login tokens — <strong>set a strong random value in production</strong></td></tr>
+          <tr><td><code>NODE_ENV</code></td><td>development</td><td><code>production</code> enables prod behaviors (<code>JWT_SECRET</code> guard, static serving)</td></tr>
+          <tr><td><code>SEED_ON_BOOT</code></td><td>off</td><td><code>1</code>/<code>true</code> seeds demo data idempotently at startup</td></tr>
+          <tr><td><code>SERVE_CLIENT</code></td><td><code>on</code></td><td>Set to <code>off</code> to run API only</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Docker</h2>
+<pre><code>docker compose up --build</code></pre>
+      <p>Brings up the whole app on <code>http://localhost:4000</code>. On first run set <code>SEED_ON_BOOT=1</code> (or in <code>.env</code>) to load demo data and a login.</p>
+<pre><code>SEED_ON_BOOT=1 JWT_SECRET=$(openssl rand -hex 32) docker compose up --build</code></pre>
+      <p>Data and uploaded resumes live in the named <code>talentflow-data</code> volume.</p>
+
+      <h2>Project layout</h2>
+<pre><code>talentflow/
+├── Dockerfile          # multi-stage build
+├── docker-compose.yml  # one-command startup with a data volume
+├── docs/               # this documentation site (static, served by GitHub Pages)
+├── server/
+│   ├── src/            # Express app + routes, db, matching, auth, branding…
+│   ├── tests/          # node:test units + API integration
+│   └── data/talentflow.db
+├── client/             # React app (Vite), plain CSS
+└── package.json</code></pre>
+
+      <h2>Notes</h2>
+      <ul>
+        <li>The database file is <code>server/data/talentflow.db</code> by default (gitignored); use <code>DB_PATH</code> to relocate. Delete it and re-run <code>npm run db:seed</code> to reset.</li>
+        <li>The dev JWT secret is <code>local-dev-secret-change-me</code> — set <code>JWT_SECRET</code> before exposing anything publicly (the server logs a warning in production if you forget).</li>
+        <li>WAL mode is on; three <code>-wal</code>/<code>-shm</code> files accompany the DB file — normal.</li>
+      </ul>
+    </article>
+  </div>
+
+  <footer class="footer">
+    Released under the AGPL-3.0 License · &copy; 2026 SamuelH98 ·
+    <a href="https://github.com/SamuelH98/talentflow" target="_blank" rel="noopener">github.com/SamuelH98/talentflow</a>
+  </footer>
+</body>
+</html>

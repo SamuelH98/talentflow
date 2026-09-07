@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="TalentFlow — introduction and getting started." />
+  <title>Introduction &amp; Setup — TalentFlow</title>
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+  <link rel="stylesheet" href="assets/site.css" />
+</head>
+<body>
+  <nav class="topnav">
+    <div class="topnav-inner">
+      <a class="brand" href="index.html"><img src="assets/logo.svg" alt="TalentFlow logo" /> TalentFlow</a>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="guide.html" class="active">Guide</a>
+        <a href="features.html">Features</a>
+        <a href="api.html">API</a>
+        <a href="deploy.html">Deploy</a>
+      </div>
+      <div class="nav-github"><a href="https://github.com/SamuelH98/talentflow" target="_blank" rel="noopener">GitHub</a></div>
+    </div>
+  </nav>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <ul>
+        <li class="group">Guide</li>
+        <li><a href="guide.html" class="active">Introduction &amp; Setup</a></li>
+        <li><a href="recruiter.html">The Recruiter App</a></li>
+        <li><a href="portal.html">Candidate Portal</a></li>
+        <li><a href="scoring.html">Scoring Model</a></li>
+        <li class="group">Reference</li>
+        <li><a href="features.html">Feature Matrix</a></li>
+        <li><a href="api.html">API Reference</a></li>
+        <li><a href="deploy.html">Deployment</a></li>
+        <li><a href="contributing.html">Contributing</a></li>
+      </ul>
+    </aside>
+
+    <article>
+      <h1>Introduction</h1>
+      <p class="lede">A locally hosted, Workday-style hiring tool that stores your candidate pool and jobs, then scores and ranks the best candidates for each role automatically — with no database server, no cloud account, and no external AI API.</p>
+
+      <p>The recruiter app mirrors <strong>LinkedIn Recruiter</strong>: a top bar with your company brand, an icon rail for navigation, a candidate search with a slide-in profile drawer, a <em>My Jobs</em> view, and a <em>Projects</em> kanban pipeline.</p>
+
+      <h2>Highlights</h2>
+      <ul>
+        <li><strong>Candidate &amp; job management</strong> — add, edit, archive, delete candidates and jobs</li>
+        <li><strong>Automatic candidate ranking</strong> — every candidate scored against every job</li>
+        <li><strong>Transparent scoring</strong> — skill / experience / years breakdown behind every match</li>
+        <li><strong>Projects pipeline</strong> — <em>matched → in review → interview → hired / rejected</em></li>
+        <li><strong>Public candidate portal</strong> — browse, apply, resume auto-fill, EEO, status tracking</li>
+        <li><strong>Screening questions</strong> — reusable bank + per-job configuration</li>
+        <li><strong>Consent + privacy</strong> — explicit consent, export, right-to-erasure (DSAR)</li>
+        <li><strong>Dark mode</strong> — neutral gray, follows the OS with a manual toggle</li>
+        <li><strong>Multi-company</strong> — data scoped per company</li>
+        <li><strong>Locally hosted</strong> — everything on your machine, fully offline-capable</li>
+      </ul>
+
+      <h2>Quick start</h2>
+      <p>Requires <strong>Node.js ≥ 20</strong> (tested on 24).</p>
+<pre><code>npm install             # root (concurrently)
+npm run setup           # installs server + client deps
+npm run db:seed         # creates the SQLite DB with sample data
+npm run dev             # starts API (:4000) + web app (:5173)</code></pre>
+      <p>Open <code>http://localhost:5173</code> and sign in with:</p>
+      <ul>
+        <li><strong>Email:</strong> <code>demo@acmetalent.com</code></li>
+        <li><strong>Password:</strong> <code>password</code></li>
+      </ul>
+
+      <h3>Candidate portal (no login needed)</h3>
+      <p><code>http://localhost:5173/#/portal</code> — browse open jobs, apply in under a minute, and track applications. After applying you get a private tracking link (<code>#/portal/status/&lt;token&gt;</code>) you can keep or share. Upload a <code>.pdf</code>, <code>.docx</code>, or <code>.txt</code> resume and the portal auto-fills your details locally (best-effort).</p>
+
+      <h3>Docker</h3>
+<pre><code>docker compose up --build</code></pre>
+      <p>Brings up the whole app on <code>http://localhost:4000</code>. On first run set <code>SEED_ON_BOOT=1</code> to load demo data and a login.</p>
+<pre><code># optional demo data on first boot
+SEED_ON_BOOT=1 JWT_SECRET=$(openssl rand -hex 32) docker compose up --build</code></pre>
+      <p>Data and uploaded resumes live in the named <code>talentflow-data</code> volume — delete the volume to reset.</p>
+
+      <h2>Scripts (from repo root)</h2>
+      <table>
+        <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>npm run server</code></td><td>API only (<code>http://localhost:4000</code>)</td></tr>
+          <tr><td><code>npm run client</code></td><td>Vite web app only (<code>http://localhost:5173</code>)</td></tr>
+          <tr><td><code>npm run dev</code></td><td>Both together</td></tr>
+          <tr><td><code>npm run build</code></td><td>Build the client into <code>client/dist</code></td></tr>
+          <tr><td><code>npm run db:seed</code></td><td>Re-seed sample data (safe: skips existing rows)</td></tr>
+          <tr><td><code>npm test</code></td><td>Server unit + API tests</td></tr>
+          <tr><td><code>cd server &amp;&amp; npm run start:prod</code></td><td>Build client + serve app and API from one port</td></tr>
+        </tbody>
+      </table>
+    </article>
+  </div>
+
+  <footer class="footer">
+    Released under the AGPL-3.0 License · &copy; 2026 SamuelH98 ·
+    <a href="https://github.com/SamuelH98/talentflow" target="_blank" rel="noopener">github.com/SamuelH98/talentflow</a>
+  </footer>
+</body>
+</html>

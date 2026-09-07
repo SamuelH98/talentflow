@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="TalentFlow — API reference." />
+  <title>API Reference — TalentFlow</title>
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+  <link rel="stylesheet" href="assets/site.css" />
+</head>
+<body>
+  <nav class="topnav">
+    <div class="topnav-inner">
+      <a class="brand" href="index.html"><img src="assets/logo.svg" alt="TalentFlow logo" /> TalentFlow</a>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="guide.html">Guide</a>
+        <a href="features.html">Features</a>
+        <a href="api.html" class="active">API</a>
+        <a href="deploy.html">Deploy</a>
+      </div>
+      <div class="nav-github"><a href="https://github.com/SamuelH98/talentflow" target="_blank" rel="noopener">GitHub</a></div>
+    </div>
+  </nav>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <ul>
+        <li class="group">Guide</li>
+        <li><a href="guide.html">Introduction &amp; Setup</a></li>
+        <li><a href="recruiter.html">The Recruiter App</a></li>
+        <li><a href="portal.html">Candidate Portal</a></li>
+        <li><a href="scoring.html">Scoring Model</a></li>
+        <li class="group">Reference</li>
+        <li><a href="features.html">Feature Matrix</a></li>
+        <li><a href="api.html" class="active">API Reference</a></li>
+        <li><a href="deploy.html">Deployment</a></li>
+        <li><a href="contributing.html">Contributing</a></li>
+      </ul>
+    </aside>
+
+    <article>
+      <h1>API Reference</h1>
+      <p class="lede">All routes (except <code>POST /api/auth/login</code>, <code>/api/health</code>, and the <code>/api/public/*</code> portal routes) require <code>Authorization: Bearer &lt;token&gt;</code>.</p>
+
+      <h2>Recruiter routes</h2>
+      <table>
+        <thead><tr><th>Method &amp; path</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>POST /api/auth/login</code></td><td>Get a JWT (<code>demo@acmetalent.com</code> / <code>password</code>)</td></tr>
+          <tr><td><code>GET|POST /api/candidates</code></td><td>List / create candidates</td></tr>
+          <tr><td><code>PUT|DELETE /api/candidates/:id</code></td><td>Update / delete a candidate</td></tr>
+          <tr><td><code>GET|POST /api/jobs</code></td><td>List / create jobs</td></tr>
+          <tr><td><code>PUT|DELETE /api/jobs/:id</code></td><td>Update / delete a job</td></tr>
+          <tr><td><code>GET /api/jobs/:id/matches</code></td><td>Ranked candidates for one job (with score breakdowns)</td></tr>
+          <tr><td><code>GET /api/matches/all</code></td><td>Best candidates per job</td></tr>
+          <tr><td><code>GET /api/search?q=</code></td><td>Global search across candidates, jobs, and applications</td></tr>
+          <tr><td><code>GET|POST /api/screening/questions</code></td><td>Screening-question library</td></tr>
+          <tr><td><code>PUT|DELETE /api/screening/questions/:id</code></td><td>Update / delete a question</td></tr>
+          <tr><td><code>GET|PUT /api/jobs/:id/screening</code></td><td>Per-job screening config</td></tr>
+          <tr><td><code>GET|POST /api/applications</code></td><td>List / create applications</td></tr>
+          <tr><td><code>PATCH /api/applications/:id/status</code></td><td>Update application status / notes</td></tr>
+          <tr><td><code>PUT /api/company/brand</code></td><td>Set company brand color (admin only)</td></tr>
+          <tr><td><code>PUT /api/company/settings</code></td><td>Update company profile — name / brand / nav / accent colors (admin only)</td></tr>
+          <tr><td><code>PUT /api/company/logo</code></td><td>Upload / replace the company logo (admin only)</td></tr>
+          <tr><td><code>DELETE /api/company/logo</code></td><td>Remove the company logo (admin only)</td></tr>
+          <tr><td><code>GET /api/company/lookup</code></td><td>Search public companies by name (admin only)</td></tr>
+          <tr><td><code>POST /api/company/adopt</code></td><td>Adopt a company's logo + brand color + title (admin only, <strong>all-or-nothing</strong>)</td></tr>
+          <tr><td><code>GET /api/audit?limit=</code></td><td>Company-scoped activity log</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Public portal routes (no auth)</h2>
+      <table>
+        <thead><tr><th>Method &amp; path</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>GET /api/public/jobs</code></td><td>Open roles (internal fields stripped, includes screening questions)</td></tr>
+          <tr><td><code>GET /api/public/company</code></td><td>Public company brand (logo / brand color / heading)</td></tr>
+          <tr><td><code>GET /api/company/logo</code></td><td>Public company logo image</td></tr>
+          <tr><td><code>GET /api/public/jobs/:id</code></td><td>Single open role</td></tr>
+          <tr><td><code>GET /api/public/questionnaire</code></td><td>EEO / self-identification questions</td></tr>
+          <tr><td><code>POST /api/public/resume/parse</code></td><td>Upload a resume, get auto-filled fields</td></tr>
+          <tr><td><code>POST /api/public/applications</code></td><td>Apply (multipart) — requires <code>consent=true</code></td></tr>
+          <tr><td><code>GET /api/public/applications/:token</code></td><td>Application status by private tracking link</td></tr>
+          <tr><td><code>POST /api/public/applications/lookup</code></td><td>List applications for an email address</td></tr>
+          <tr><td><code>GET /api/public/privacy</code></td><td>Privacy notice and current policy version</td></tr>
+          <tr><td><code>POST /api/public/export</code></td><td>Data subject access request (returns <code>erasure_token</code>)</td></tr>
+          <tr><td><code>POST /api/public/erasure</code></td><td>Right-to-be-forgotten — delete data for an email (403 on wrong token)</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Visibility guarantees</h2>
+      <ul>
+        <li>Match scores are <strong>never</strong> exposed to candidates — the portal shows stage status only.</li>
+        <li>Screening answers are returned to recruiters with labelled questions; EEO answers are stored server-side (compliance) but <strong>never</strong> returned by recruiter or portal routes.</li>
+      </ul>
+    </article>
+  </div>
+
+  <footer class="footer">
+    Released under the AGPL-3.0 License · &copy; 2026 SamuelH98 ·
+    <a href="https://github.com/SamuelH98/talentflow" target="_blank" rel="noopener">github.com/SamuelH98/talentflow</a>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="TalentFlow — contributing guide." />
+  <title>Contributing — TalentFlow</title>
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+  <link rel="stylesheet" href="assets/site.css" />
+</head>
+<body>
+  <nav class="topnav">
+    <div class="topnav-inner">
+      <a class="brand" href="index.html"><img src="assets/logo.svg" alt="TalentFlow logo" /> TalentFlow</a>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="guide.html">Guide</a>
+        <a href="features.html">Features</a>
+        <a href="api.html">API</a>
+        <a href="deploy.html">Deploy</a>
+      </div>
+      <div class="nav-github"><a href="https://github.com/SamuelH98/talentflow" target="_blank" rel="noopener">GitHub</a></div>
+    </div>
+  </nav>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <ul>
+        <li class="group">Guide</li>
+        <li><a href="guide.html">Introduction &amp; Setup</a></li>
+        <li><a href="recruiter.html">The Recruiter App</a></li>
+        <li><a href="portal.html">Candidate Portal</a></li>
+        <li><a href="scoring.html">Scoring Model</a></li>
+        <li class="group">Reference</li>
+        <li><a href="features.html">Feature Matrix</a></li>
+        <li><a href="api.html">API Reference</a></li>
+        <li><a href="deploy.html">Deployment</a></li>
+        <li><a href="contributing.html" class="active">Contributing</a></li>
+      </ul>
+    </aside>
+
+    <article>
+      <h1>Contributing</h1>
+      <p class="lede">TalentFlow is open source under the <a href="https://github.com/SamuelH98/talentflow/blob/master/LICENSE">AGPL-3.0 License</a>. We welcome contributions — please start by reading the <a href="https://github.com/SamuelH98/talentflow/blob/master/CODE_OF_CONDUCT.md">Code of Conduct</a>.</p>
+
+      <h2>Setting up for development</h2>
+<pre><code>npm install
+npm run setup
+npm run db:seed
+npm run dev</code></pre>
+
+      <h2>Tests</h2>
+<pre><code>npm test                     # server unit + API integration tests (node:test)</code></pre>
+      <p>Run the client build to verify the front-end compiles:</p>
+<pre><code>cd client && npx vite build</code></pre>
+
+      <h2>Feature roadmap</h2>
+      <p>See the <a href="features.html">Feature Matrix</a> for what's shipped, in progress, and on the roadmap.</p>
+
+      <h2>Documentation</h2>
+      <p>This site is static HTML under <code>docs/</code>, served directly by GitHub Pages — no build step. Edit the pages and commit; Pages picks them up automatically.</p>
+
+      <h2>Notes</h2>
+      <ul>
+        <li>The database file is <code>server/data/talentflow.db</code> by default (gitignored); use <code>DB_PATH</code> to relocate. Delete it and re-run <code>npm run db:seed</code> to reset.</li>
+        <li>The dev JWT secret is <code>local-dev-secret-change-me</code> — set <code>JWT_SECRET</code> before exposing anything publicly.</li>
+        <li>WAL mode is on; three <code>-wal</code>/<code>-shm</code> files accompany the DB file — normal.</li>
+      </ul>
+    </article>
+  </div>
+
+  <footer class="footer">
+    Released under the AGPL-3.0 License · &copy; 2026 SamuelH98 ·
+    <a href="https://github.com/SamuelH98/talentflow" target="_blank" rel="noopener">github.com/SamuelH98/talentflow</a>
+  </footer>
+</body>
+</html>
