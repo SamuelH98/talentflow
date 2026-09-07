@@ -2,7 +2,7 @@
 
 A locally hosted, Workday-style hiring tool that stores your candidate pool and jobs, then **scores and ranks the best candidates** for each role automatically — with no database server, no cloud account, and no external AI API. Runs in under a minute.
 
-[License: AGPL-3.0](LICENSE) · [Contributing](CONTRIBUTING.md) · [Code of Conduct](CODE_OF_CONDUCT.md) · [Feature matrix](docs/FEATURES.md)
+[License: AGPL-3.0](LICENSE) · [Contributing](CONTRIBUTING.md) · [Code of Conduct](CODE_OF_CONDUCT.md) · [Documentation](https://samuelh98.github.io/talentflow/) · [Feature matrix](docs/FEATURES.md)
 
 ## Features
 
